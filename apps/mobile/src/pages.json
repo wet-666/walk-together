@@ -1,0 +1,84 @@
+{
+  "pages": [
+    {
+      "path": "pages/map/index",
+      "style": {
+        "navigationBarTitleText": "同路行"
+      }
+    },
+    {
+      "path": "pages/message/index",
+      "style": {
+        "navigationBarTitleText": "消息"
+      }
+    },
+    {
+      "path": "pages/trip/index",
+      "style": {
+        "navigationBarTitleText": "行程"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/trip/publish",
+      "style": {
+        "navigationBarTitleText": "发布行程"
+      }
+    },
+    {
+      "path": "pages/mine/settings",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "同路行",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F4F6F8"
+  },
+  "tabBar": {
+    "color": "#6B7280",
+    "selectedColor": "#1D4F91",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/map/index",
+        "text": "地图",
+        "iconPath": "static/tab/map.png",
+        "selectedIconPath": "static/tab/map-active.png"
+      },
+      {
+        "pagePath": "pages/message/index",
+        "text": "消息",
+        "iconPath": "static/tab/message.png",
+        "selectedIconPath": "static/tab/message-active.png"
+      },
+      {
+        "pagePath": "pages/trip/index",
+        "text": "行程",
+        "iconPath": "static/tab/trip.png",
+        "selectedIconPath": "static/tab/trip-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tab/mine.png",
+        "selectedIconPath": "static/tab/mine-active.png"
+      }
+    ]
+  }
+}
