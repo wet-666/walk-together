@@ -7,7 +7,9 @@ onLaunch(() => {
 </script>
 
 <style>
+:root,
 page {
+  --wot-color-theme: #1d4f91;
   background-color: #f4f6f8;
   color: #1f2937;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

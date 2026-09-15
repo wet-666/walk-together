@@ -1,14 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ErrorCode, type ApiResult } from '@walk-together/shared-types';
+import { ErrorCode, type ApiResult, type HealthData } from '@walk-together/shared-types';
 import Redis from 'ioredis';
 import mysql from 'mysql2/promise';
-
-export type HealthData = {
-  mysql: 'ok' | 'down';
-  redis: 'ok' | 'down';
-  uptime: number;
-};
 
 @Injectable()
 export class HealthService {
@@ -28,6 +22,7 @@ export class HealthService {
         mysql: mysqlStatus,
         redis: redisStatus,
         uptime: process.uptime(),
+        version: this.config.get<string>('APP_VERSION', '0.1.0-m0'),
       },
     };
   }

@@ -6,7 +6,9 @@
       action-text="去发布行程"
       @action="goTrip"
     />
-    <text class="health">{{ healthText }}</text>
+    <view class="health">
+      <wd-tag :type="healthType" mark>{{ healthText }}</wd-tag>
+    </view>
   </view>
 </template>
 
@@ -18,6 +20,7 @@ import { getHealth } from "../../api/http";
 import { ErrorCode } from "@walk-together/shared-types";
 
 const healthText = ref("正在检查服务…");
+const healthType = ref<"default" | "success" | "warning">("default");
 
 onShow(() => {
   void refreshHealth();
@@ -30,18 +33,17 @@ function goTrip() {
 async function refreshHealth() {
   const result = await getHealth();
   if (result.code === ErrorCode.OK && result.data) {
-    healthText.value = `服务已连接 · MySQL ${result.data.mysql} · Redis ${result.data.redis}`;
+    healthType.value = "success";
+    healthText.value = `服务已连接 · ${result.data.version}`;
     return;
   }
+  healthType.value = "warning";
   healthText.value = result.message || "服务未就绪";
 }
 </script>
 
 <style scoped>
 .health {
-  display: block;
   padding: 0 64rpx 48rpx;
-  font-size: 22rpx;
-  color: #9ca3af;
 }
 </style>

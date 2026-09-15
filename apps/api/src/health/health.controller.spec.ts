@@ -16,7 +16,12 @@ describe('HealthController', () => {
             check: async () => ({
               code: ErrorCode.OK,
               message: 'ok',
-              data: { mysql: 'ok', redis: 'ok', uptime: 1 },
+              data: {
+                mysql: 'ok',
+                redis: 'ok',
+                uptime: 1,
+                version: '0.1.0-m0',
+              },
             }),
           },
         },

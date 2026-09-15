@@ -6,7 +6,9 @@
       action-text="登录"
       @action="goLogin"
     />
-    <button class="link" hover-class="link--active" @click="goSettings">设置</button>
+    <view class="extra">
+      <wd-button type="primary" plain @click="goSettings">设置</wd-button>
+    </view>
   </view>
 </template>
 
@@ -23,22 +25,7 @@ function goSettings() {
 </script>
 
 <style scoped>
-.link {
-  margin: 0 64rpx 48rpx;
-  padding: 0;
-  height: 72rpx;
-  line-height: 72rpx;
-  font-size: 28rpx;
-  color: #1d4f91;
-  background: transparent;
-  text-align: left;
-}
-
-.link--active {
-  opacity: 0.7;
-}
-
-.link::after {
-  border: none;
+.extra {
+  padding: 0 48rpx 48rpx;
 }
 </style>

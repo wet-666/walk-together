@@ -1,0 +1,29 @@
+const FALLBACK_NATIVE_BASE = "http://127.0.0.1:3000/api/v1";
+
+function trimSlash(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+/**
+ * H5 开发走 Vite 代理，可用相对路径。
+ * 微信小程序和 APP 必须是完整 http(s) 地址；真机请把 VITE_API_BASE_URL
+ * 改成电脑局域网 IP，例如 http://192.168.1.8:3000/api/v1。
+ */
+export function getApiBaseUrl(): string {
+  const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim();
+
+  // #ifdef H5
+  return trimSlash(fromEnv || "/api/v1");
+  // #endif
+
+  // #ifdef MP-WEIXIN || APP-PLUS
+  if (fromEnv && /^https?:\/\//.test(fromEnv)) {
+    return trimSlash(fromEnv);
+  }
+  return FALLBACK_NATIVE_BASE;
+  // #endif
+
+  return trimSlash(fromEnv || "/api/v1");
+}
+
+export const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);

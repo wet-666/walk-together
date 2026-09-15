@@ -1,4 +1,10 @@
 {
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^wd-(.*)": "wot-design-uni/components/wd-$1/wd-$1.vue"
+    }
+  },
   "pages": [
     {
       "path": "pages/map/index",
@@ -80,5 +86,11 @@
         "selectedIconPath": "static/tab/mine-active.png"
       }
     ]
+  },
+  "h5": {
+    "router": {
+      "mode": "history",
+      "base": "/"
+    }
   }
 }

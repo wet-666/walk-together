@@ -1,15 +1,16 @@
 <template>
   <view class="empty">
-    <text class="empty__title">{{ title }}</text>
+    <wd-status-tip image="content" :tip="title" />
     <text class="empty__desc">{{ description }}</text>
-    <button
+    <wd-button
       v-if="actionText"
-      class="empty__btn"
-      hover-class="empty__btn--active"
+      type="primary"
+      block
+      custom-class="empty__btn"
       @click="emit('action')"
     >
       {{ actionText }}
-    </button>
+    </wd-button>
   </view>
 </template>
 
@@ -28,43 +29,20 @@ const emit = defineEmits<{
 <style scoped>
 .empty {
   min-height: 70vh;
-  padding: 80rpx 64rpx;
+  padding: 48rpx 64rpx 80rpx;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 24rpx;
-}
-
-.empty__title {
-  font-size: 40rpx;
-  font-weight: 600;
-  color: #1f2937;
+  align-items: stretch;
 }
 
 .empty__desc {
+  margin-top: -12rpx;
   font-size: 28rpx;
   line-height: 1.6;
   color: #6b7280;
 }
 
 .empty__btn {
-  margin-top: 24rpx;
-  margin-left: 0;
-  padding: 0 40rpx;
-  height: 80rpx;
-  line-height: 80rpx;
-  font-size: 28rpx;
-  color: #ffffff;
-  background: #1d4f91;
-  border-radius: 8rpx;
-}
-
-.empty__btn--active {
-  background: #163e73;
-}
-
-.empty__btn::after {
-  border: none;
+  margin-top: 40rpx;
 }
 </style>
