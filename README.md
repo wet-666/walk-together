@@ -1,12 +1,12 @@
 # 同路行
 
-自驾组队出行。第一期只做：登录 → 建队 → 地图看见对方 → 群里说话。
+自驾组队出行。第一期 MVP 只做：登录 → 建队 → 地图看见对方 → 群里说话。
 
-当前阶段是 **M0 仓库与基建**：能启动，能连库，密钥不进代码。还没有登录和行程业务。
+当前阶段是 **M1 账号登录**：微信或手机验证码登录，「我的」能认出你，后续请求带 JWT。行程、地图 SDK、群聊还没有。
 
-## 怎么跑
+## 本机怎么跑
 
-本机需要 Node 20+、pnpm、Docker。
+需要 Node 20+、pnpm、Docker Desktop。
 
 ```bash
 pnpm install
@@ -18,14 +18,33 @@ pnpm dev:mobile
 
 - 后端探活：http://127.0.0.1:3000/api/v1/health
 - 用户端 H5：http://localhost:5173/
+- 微信小程序开发：`pnpm dev:mp`，用微信开发者工具打开 `apps/mobile/dist/dev/mp-weixin`
 - 本地 MySQL 映射到 **3307**（避免和本机已有 3306 冲突），Redis 仍是 6379
+
+小程序 / APP 真机不能走 Vite 代理。把 `apps/mobile/.env.development` 里的 `VITE_API_BASE_URL` 改成电脑局域网地址，例如 `http://192.168.1.8:3000/api/v1`。开发阶段请关闭小程序「校验合法域名」。
+
+## 部署（M0 只交付 API + H5 反代）
+
+密钥全部走环境变量，HTTPS 由 Nginx 或云负载均衡终止。
+
+```bash
+copy .env.example apps\api\.env
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+H5 发行产物在 `apps/mobile/dist/build/h5`，放到 Nginx 的 html 目录，配置见 `deploy/nginx.h5.conf`。正式环境把 `CORS_ORIGIN` 改成 H5 域名；微信小程序要在后台配置 request 合法域名，并把 `apps/mobile/.env.production` 的接口改成 `https://你的域名/api/v1`。
+
+APP 打包仍需 HBuilderX；本仓库用 CLI 出资源和 H5 / 小程序。
 
 ## 仓库结构
 
 ```
-apps/mobile            Uni-App（APP + 微信小程序同一工程）
+apps/mobile            Uni-App（APP + 微信小程序 + H5，同一工程）
 apps/api               NestJS
 packages/shared-types  接口类型和错误码
+deploy/nginx.h5.conf   H5 反代示例
+docker-compose.yml     本地 MySQL / Redis
+docker-compose.prod.yml  含 API 镜像
 ```
 
 商家 / 运营后台以后再加 `apps/admin`，现在不要建。

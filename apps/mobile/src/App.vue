@@ -1,8 +1,22 @@
 <script setup lang="ts">
 import { onLaunch } from "@dcloudio/uni-app";
+import { ErrorCode } from "@walk-together/shared-types";
+import { getMe } from "./api/auth";
+import { clearSession, isLoggedIn, setProfile } from "./store/session";
 
 onLaunch(() => {
-  // M0：只启动到四 Tab 空壳，不接登录和高德。
+  if (!isLoggedIn()) {
+    return;
+  }
+  void getMe().then((result) => {
+    if (result.code === ErrorCode.OK && result.data) {
+      setProfile(result.data);
+      return;
+    }
+    if (result.code === ErrorCode.UNAUTHORIZED) {
+      clearSession();
+    }
+  });
 });
 </script>
 

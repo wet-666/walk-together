@@ -11,7 +11,11 @@
     "dev:infra": "docker compose up -d",
     "dev:api": "pnpm --filter @walk-together/shared-types build && pnpm --filter @walk-together/api start:dev",
     "dev:mobile": "pnpm --filter @walk-together/mobile dev:h5",
-    "build:types": "pnpm --filter @walk-together/shared-types build"
+    "dev:mp": "pnpm --filter @walk-together/mobile dev:mp-weixin",
+    "build:types": "pnpm --filter @walk-together/shared-types build",
+    "build:api": "pnpm --filter @walk-together/shared-types build && pnpm --filter @walk-together/api build",
+    "build:h5": "pnpm --filter @walk-together/mobile build:h5",
+    "build:mp": "pnpm --filter @walk-together/mobile build:mp-weixin"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

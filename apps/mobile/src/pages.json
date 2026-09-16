@@ -47,6 +47,12 @@
       "style": {
         "navigationBarTitleText": "设置"
       }
+    },
+    {
+      "path": "pages/mine/agreement",
+      "style": {
+        "navigationBarTitleText": "协议"
+      }
     }
   ],
   "globalStyle": {

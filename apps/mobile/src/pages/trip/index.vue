@@ -9,8 +9,12 @@
 
 <script setup lang="ts">
 import EmptyState from "../../components/EmptyState.vue";
+import { ensureLogin } from "../../store/session";
 
 function goPublish() {
+  if (!ensureLogin("/pages/trip/publish")) {
+    return;
+  }
   uni.navigateTo({ url: "/pages/trip/publish" });
 }
 </script>

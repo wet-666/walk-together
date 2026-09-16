@@ -1,18 +1,51 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Request } from 'express';
+import { TokenService } from '../auth/token.service';
+import type { AuthedRequest } from '../decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { BusinessException } from '../exceptions/business.exception';
 
-/** M0 空位：无论是否公开都放行。M1 再对非 @Public() 路由校验 JWT。 */
+type GuardRequest = Request & AuthedRequest;
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly tokens: TokenService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
-    const _isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    void _isPublic;
+    if (isPublic) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest<GuardRequest>();
+    const token = this.readBearer(request.headers.authorization);
+    if (!token) {
+      throw BusinessException.unauthorized();
+    }
+
+    const payload = this.tokens.verify(token);
+    if (await this.tokens.isRevoked(payload.jti)) {
+      throw BusinessException.unauthorized();
+    }
+
+    request.userId = payload.userId;
+    request.tokenJti = payload.jti;
+    request.tokenExp = payload.exp;
     return true;
+  }
+
+  private readBearer(header: unknown): string | null {
+    if (typeof header !== 'string') {
+      return null;
+    }
+    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+    return match?.[1]?.trim() || null;
   }
 }

@@ -17,8 +17,9 @@ export function getApiBaseUrl(): string {
   // #endif
 
   // #ifdef MP-WEIXIN || APP-PLUS
-  if (fromEnv && /^https?:\/\//.test(fromEnv)) {
-    return trimSlash(fromEnv);
+  const nativeBase = fromEnv ?? "";
+  if (nativeBase && /^https?:\/\//.test(nativeBase)) {
+    return trimSlash(nativeBase);
   }
   return FALLBACK_NATIVE_BASE;
   // #endif

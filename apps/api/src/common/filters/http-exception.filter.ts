@@ -12,15 +12,45 @@ import type { Response } from 'express';
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const isHttp = exception instanceof HttpException;
-    const status = isHttp
-      ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
-    const body: ApiResult = {
-      code: status === HttpStatus.INTERNAL_SERVER_ERROR ? ErrorCode.FAILED : status,
-      message: isHttp ? exception.message : '服务异常',
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const raw = exception.getResponse();
+      if (this.isApiResult(raw)) {
+        response.status(status).json(raw);
+        return;
+      }
+
+      const message =
+        typeof raw === 'string'
+          ? raw
+          : exception.message || '请求失败';
+      response.status(status).json({
+        code:
+          status === HttpStatus.UNAUTHORIZED
+            ? ErrorCode.UNAUTHORIZED
+            : status === HttpStatus.INTERNAL_SERVER_ERROR
+              ? ErrorCode.FAILED
+              : status,
+        message,
+        data: null,
+      } satisfies ApiResult);
+      return;
+    }
+
+    response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      code: ErrorCode.FAILED,
+      message: '服务异常',
       data: null,
-    };
-    response.status(status).json(body);
+    } satisfies ApiResult);
+  }
+
+  private isApiResult(value: unknown): value is ApiResult {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'code' in value &&
+      'message' in value
+    );
   }
 }

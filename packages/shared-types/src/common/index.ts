@@ -8,6 +8,22 @@ export const ErrorCode = {
   OK: 0,
   FAILED: 1000,
   SERVICE_UNAVAILABLE: 1001,
+  UNAUTHORIZED: 1101,
+  SMS_CODE_INVALID: 1102,
+  SMS_SEND_TOO_FAST: 1103,
+  WECHAT_CODE_INVALID: 1104,
+  ACCOUNT_DISABLED: 1105,
+  PHONE_INVALID: 1106,
+  SMS_DAY_LIMIT: 1107,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+export type HealthStatus = 'ok' | 'down';
+
+export interface HealthData {
+  mysql: HealthStatus;
+  redis: HealthStatus;
+  uptime: number;
+  version: string;
+}
