@@ -9,12 +9,13 @@ function tokenHeader(): Record<string, string> {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   header?: Record<string, string>;
   data?: object;
   loading?: boolean;
   toast?: boolean;
   authRedirect?: boolean;
+  retry?: boolean;
 };
 
 let redirecting = false;
@@ -25,9 +26,16 @@ function currentRoute(): string {
   return page?.route || "";
 }
 
-function handleUnauthorized(authRedirect: boolean): void {
+function handleUnauthorized(authRedirect: boolean, code?: number): void {
   clearSession();
-  if (!authRedirect || currentRoute() === "pages/auth/login" || redirecting) {
+  if (
+    !authRedirect ||
+    currentRoute() === "pages/auth/login" ||
+    redirecting
+  ) {
+    return;
+  }
+  if (code === ErrorCode.ACCOUNT_DISABLED) {
     return;
   }
   redirecting = true;
@@ -39,9 +47,43 @@ function handleUnauthorized(authRedirect: boolean): void {
   });
 }
 
+function networkMessage(errMsg = ""): string {
+  if (/timeout/i.test(errMsg)) {
+    return "网络超时，请稍后重试";
+  }
+  if (/fail|network|offline|disconnect/i.test(errMsg)) {
+    return "网络异常，请检查网络后重试";
+  }
+  return "服务未就绪";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export function request<T>(
   path: string,
   options: RequestOptions = {},
+): Promise<ApiResult<T>> {
+  return requestOnce<T>(path, options).then(async (result) => {
+    const method = options.method ?? "GET";
+    if (
+      method === "GET" &&
+      options.retry !== false &&
+      result.code === ErrorCode.SERVICE_UNAVAILABLE
+    ) {
+      await sleep(400);
+      return requestOnce<T>(path, { ...options, loading: false, retry: false });
+    }
+    return result;
+  });
+}
+
+function requestOnce<T>(
+  path: string,
+  options: RequestOptions,
 ): Promise<ApiResult<T>> {
   const loading = options.loading === true;
   const toast = options.toast !== false;
@@ -66,9 +108,10 @@ export function request<T>(
         if (data && typeof data.code === "number") {
           if (
             data.code === ErrorCode.UNAUTHORIZED ||
+            data.code === ErrorCode.ACCOUNT_DISABLED ||
             res.statusCode === 401
           ) {
-            handleUnauthorized(authRedirect);
+            handleUnauthorized(authRedirect, data.code);
           }
           if (toast && data.code !== ErrorCode.OK) {
             uni.showToast({ title: data.message || "请求失败", icon: "none" });
@@ -89,10 +132,10 @@ export function request<T>(
         }
         resolve(fallback);
       },
-      fail: () => {
+      fail: (err) => {
         const fallback: ApiResult<T> = {
           code: ErrorCode.SERVICE_UNAVAILABLE,
-          message: "服务未就绪",
+          message: networkMessage(err?.errMsg),
           data: null,
         };
         if (toast) {
@@ -104,6 +147,58 @@ export function request<T>(
         if (loading) {
           uni.hideLoading();
         }
+      },
+    });
+  });
+}
+
+export function upload<T>(
+  path: string,
+  filePath: string,
+  name = "file",
+): Promise<ApiResult<T>> {
+  uni.showLoading({ title: "上传中", mask: true });
+  return new Promise((resolve) => {
+    uni.uploadFile({
+      url: `${getApiBaseUrl()}${path}`,
+      filePath,
+      name,
+      timeout: API_TIMEOUT_MS,
+      header: tokenHeader(),
+      success: (res) => {
+        try {
+          const data = JSON.parse(res.data) as ApiResult<T>;
+          if (data.code !== ErrorCode.OK) {
+            uni.showToast({ title: data.message || "上传失败", icon: "none" });
+          }
+          if (
+            data.code === ErrorCode.UNAUTHORIZED ||
+            data.code === ErrorCode.ACCOUNT_DISABLED
+          ) {
+            handleUnauthorized(true, data.code);
+          }
+          resolve(data);
+        } catch {
+          const fallback: ApiResult<T> = {
+            code: ErrorCode.FAILED,
+            message: "响应格式不正确",
+            data: null,
+          };
+          uni.showToast({ title: fallback.message, icon: "none" });
+          resolve(fallback);
+        }
+      },
+      fail: (err) => {
+        const fallback: ApiResult<T> = {
+          code: ErrorCode.SERVICE_UNAVAILABLE,
+          message: networkMessage(err?.errMsg),
+          data: null,
+        };
+        uni.showToast({ title: fallback.message, icon: "none" });
+        resolve(fallback);
+      },
+      complete: () => {
+        uni.hideLoading();
       },
     });
   });

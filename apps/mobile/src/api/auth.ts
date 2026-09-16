@@ -1,11 +1,13 @@
 import type {
+  BindPhoneDto,
   LoginBySmsDto,
   LoginByWxDto,
   LoginResult,
   SendSmsDto,
+  UpdateProfileDto,
   UserProfile,
 } from "@walk-together/shared-types";
-import { request } from "./http";
+import { request, upload } from "./http";
 
 export function sendSms(dto: SendSmsDto) {
   return request<null>("/auth/sms/send", {
@@ -44,4 +46,32 @@ export function getMe() {
     toast: false,
     authRedirect: false,
   });
+}
+
+export function updateProfile(dto: UpdateProfileDto) {
+  return request<UserProfile>("/users/me", {
+    method: "PATCH",
+    data: dto,
+    loading: true,
+  });
+}
+
+export function bindPhone(dto: BindPhoneDto) {
+  return request<UserProfile>("/users/me/phone", {
+    method: "POST",
+    data: dto,
+    loading: true,
+  });
+}
+
+export function cancelAccount() {
+  return request<null>("/users/me/cancel", {
+    method: "POST",
+    loading: true,
+    authRedirect: false,
+  });
+}
+
+export function uploadAvatar(filePath: string) {
+  return upload<UserProfile>("/users/me/avatar", filePath);
 }

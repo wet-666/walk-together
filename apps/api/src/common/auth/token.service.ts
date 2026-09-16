@@ -66,6 +66,15 @@ export class TokenService {
     return blocked === '1';
   }
 
+  async blockUser(userId: number): Promise<void> {
+    await this.redis.set(this.userBlockKey(userId), '1');
+  }
+
+  async isUserBlocked(userId: number): Promise<boolean> {
+    const blocked = await this.redis.get(this.userBlockKey(userId));
+    return blocked === '1';
+  }
+
   remainingTtl(exp: number): number {
     return Math.max(exp - Math.floor(Date.now() / 1000), 0);
   }
@@ -76,5 +85,9 @@ export class TokenService {
 
   private blockKey(jti: string): string {
     return `auth:block:${jti}`;
+  }
+
+  private userBlockKey(userId: number): string {
+    return `auth:user-block:${userId}`;
   }
 }

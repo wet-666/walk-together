@@ -20,6 +20,7 @@ COPY packages/shared-types/package.json packages/shared-types/package.json
 RUN pnpm install --frozen-lockfile --prod --filter @walk-together/api...
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/packages/shared-types/dist packages/shared-types/dist
+RUN mkdir -p /app/apps/api/uploads/avatars
 WORKDIR /app/apps/api
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

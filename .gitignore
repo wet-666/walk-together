@@ -13,7 +13,8 @@ coverage
 !.env.production
 
 apps/mobile/dist
-apps/api/dist
+apps/api/uploads
+uploads/
 packages/shared-types/dist
 
 unpackage

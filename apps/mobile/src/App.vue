@@ -5,6 +5,12 @@ import { getMe } from "./api/auth";
 import { clearSession, isLoggedIn, setProfile } from "./store/session";
 
 onLaunch(() => {
+  uni.onNetworkStatusChange((res) => {
+    if (!res.isConnected) {
+      uni.showToast({ title: "网络已断开", icon: "none" });
+    }
+  });
+
   if (!isLoggedIn()) {
     return;
   }
@@ -13,7 +19,10 @@ onLaunch(() => {
       setProfile(result.data);
       return;
     }
-    if (result.code === ErrorCode.UNAUTHORIZED) {
+    if (
+      result.code === ErrorCode.UNAUTHORIZED ||
+      result.code === ErrorCode.ACCOUNT_DISABLED
+    ) {
       clearSession();
     }
   });

@@ -98,7 +98,7 @@ export class WechatService {
   }
 
   private async getJson(url: URL): Promise<Record<string, string | undefined>> {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) {
       throw new BusinessException(ErrorCode.WECHAT_CODE_INVALID, '微信登录暂不可用，请用手机号');
     }

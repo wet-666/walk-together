@@ -49,6 +49,18 @@
       }
     },
     {
+      "path": "pages/mine/profile",
+      "style": {
+        "navigationBarTitleText": "编辑资料"
+      }
+    },
+    {
+      "path": "pages/mine/bind-phone",
+      "style": {
+        "navigationBarTitleText": "绑定手机号"
+      }
+    },
+    {
       "path": "pages/mine/agreement",
       "style": {
         "navigationBarTitleText": "协议"

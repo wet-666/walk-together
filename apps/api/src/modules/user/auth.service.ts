@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   ErrorCode,
   WechatClient,
+  type BindPhoneDto,
   type LoginBySmsDto,
   type LoginByWxDto,
   type LoginResult,
@@ -51,11 +52,22 @@ export class AuthService {
     return this.issue(profile);
   }
 
+  async bindPhone(userId: number, dto: BindPhoneDto): Promise<UserProfile> {
+    const phone = assertPhone(dto.phone);
+    await this.sms.consume(phone, dto.code ?? '');
+    return this.users.bindPhone(userId, phone);
+  }
+
   async logout(jti: string | undefined, exp: number | undefined): Promise<void> {
     if (!jti) {
       return;
     }
     await this.tokens.revoke(jti, this.tokens.remainingTtl(exp ?? 0));
+  }
+
+  async cancel(userId: number, jti: string | undefined, exp: number | undefined): Promise<void> {
+    await this.users.cancel(userId);
+    await this.logout(jti, exp);
   }
 
   private issue(profile: UserProfile): LoginResult {

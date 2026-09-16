@@ -10,6 +10,11 @@ import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from 'mysq
 
 type SqlParam = string | number | boolean | null | Date | Buffer;
 
+export type DbOps = {
+  query: <T extends RowDataPacket>(sql: string, params?: SqlParam[]) => Promise<T[]>;
+  exec: (sql: string, params?: SqlParam[]) => Promise<ResultSetHeader>;
+};
+
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
@@ -63,6 +68,31 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async withTransaction<T>(work: (ops: DbOps) => Promise<T>): Promise<T> {
+    const conn = await this.poolOrThrow().getConnection();
+    await conn.beginTransaction();
+    const ops: DbOps = {
+      query: async <R extends RowDataPacket>(sql: string, params: SqlParam[] = []) => {
+        const [rows] = await conn.execute<R[]>(sql, params);
+        return rows;
+      },
+      exec: async (sql: string, params: SqlParam[] = []) => {
+        const [result] = await conn.execute<ResultSetHeader>(sql, params);
+        return result;
+      },
+    };
+    try {
+      const result = await work(ops);
+      await conn.commit();
+      return result;
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
+
   private poolOrThrow(): Pool {
     if (!this.pool) {
       throw new ServiceUnavailableException('数据库未就绪');
@@ -73,7 +103,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   /**
    * 用户表按交付文档用户系统预留：
    * 手机号 / 微信身份 / 昵称头像 / 车型车牌 / 车主认证状态。
-   * M1 只用登录字段；认证和改资料留给后续模块。
+   * status：1 正常，0 已注销。
    */
   private async ensureSchema(): Promise<void> {
     await this.exec(`

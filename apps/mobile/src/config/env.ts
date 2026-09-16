@@ -28,3 +28,19 @@ export function getApiBaseUrl(): string {
 }
 
 export const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);
+
+export const CN_MOBILE = /^1[3-9]\d{9}$/;
+
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  const base = getApiBaseUrl();
+  if (url.startsWith("/")) {
+    return `${base}${url}`;
+  }
+  return `${base}/${url}`;
+}

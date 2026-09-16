@@ -15,6 +15,8 @@ export const ErrorCode = {
   ACCOUNT_DISABLED: 1105,
   PHONE_INVALID: 1106,
   SMS_DAY_LIMIT: 1107,
+  PROFILE_INVALID: 1108,
+  PHONE_BIND_CONFLICT: 1109,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

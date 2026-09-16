@@ -1,5 +1,6 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ErrorCode } from '@walk-together/shared-types';
 import type { Request } from 'express';
 import { TokenService } from '../auth/token.service';
 import type { AuthedRequest } from '../decorators/current-user.decorator';
@@ -33,6 +34,13 @@ export class JwtAuthGuard implements CanActivate {
     const payload = this.tokens.verify(token);
     if (await this.tokens.isRevoked(payload.jti)) {
       throw BusinessException.unauthorized();
+    }
+    if (await this.tokens.isUserBlocked(payload.userId)) {
+      throw new BusinessException(
+        ErrorCode.ACCOUNT_DISABLED,
+        '账号已注销',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     request.userId = payload.userId;

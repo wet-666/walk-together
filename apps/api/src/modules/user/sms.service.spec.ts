@@ -9,6 +9,7 @@ describe('SmsService', () => {
   const redis = {
     setNx: jest.fn(),
     incr: jest.fn(),
+    incrBy: jest.fn(),
     expire: jest.fn(),
     del: jest.fn(),
     setEx: jest.fn(),
@@ -16,9 +17,15 @@ describe('SmsService', () => {
   };
 
   let sms: SmsService;
+  let env: Record<string, string>;
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    env = {
+      NODE_ENV: 'development',
+      AUTH_DEV_MODE: 'true',
+      SMS_DEV_CODE: '123456',
+    };
     const module = await Test.createTestingModule({
       providers: [
         SmsService,
@@ -26,14 +33,7 @@ describe('SmsService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string, fallback?: string) => {
-              const values: Record<string, string> = {
-                NODE_ENV: 'development',
-                AUTH_DEV_MODE: 'true',
-                SMS_DEV_CODE: '123456',
-              };
-              return values[key] ?? fallback;
-            },
+            get: (key: string, fallback?: string) => env[key] ?? fallback,
           },
         },
       ],
@@ -48,11 +48,44 @@ describe('SmsService', () => {
     expect(redis.setEx).toHaveBeenCalledWith('sms:code:13800138000', 300, '123456');
   });
 
+  it('rejects sending too fast', async () => {
+    redis.setNx.mockResolvedValue(false);
+    await expect(sms.send('13800138000')).rejects.toMatchObject({
+      errorCode: ErrorCode.SMS_SEND_TOO_FAST,
+    } satisfies Partial<BusinessException>);
+  });
+
+  it('rejects when the daily limit is reached', async () => {
+    redis.setNx.mockResolvedValue(true);
+    redis.incr.mockResolvedValue(11);
+    await expect(sms.send('13800138000')).rejects.toMatchObject({
+      errorCode: ErrorCode.SMS_DAY_LIMIT,
+    } satisfies Partial<BusinessException>);
+    expect(redis.incrBy).toHaveBeenCalled();
+  });
+
   it('rejects a wrong code', async () => {
     redis.get.mockResolvedValue('123456');
     redis.incr.mockResolvedValue(1);
     await expect(sms.consume('13800138000', '000000')).rejects.toMatchObject({
       errorCode: ErrorCode.SMS_CODE_INVALID,
+    } satisfies Partial<BusinessException>);
+  });
+
+  it('invalidates the code after five failures', async () => {
+    redis.get.mockResolvedValue('123456');
+    redis.incr.mockResolvedValue(5);
+    await expect(sms.consume('13800138000', '000000')).rejects.toMatchObject({
+      errorCode: ErrorCode.SMS_CODE_INVALID,
+    } satisfies Partial<BusinessException>);
+    expect(redis.del).toHaveBeenCalled();
+  });
+
+  it('rejects production send when vendor keys are missing', async () => {
+    env.NODE_ENV = 'production';
+    env.AUTH_DEV_MODE = 'false';
+    await expect(sms.send('13800138000')).rejects.toMatchObject({
+      errorCode: ErrorCode.SERVICE_UNAVAILABLE,
     } satisfies Partial<BusinessException>);
   });
 });

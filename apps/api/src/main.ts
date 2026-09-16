@@ -1,4 +1,6 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -15,11 +17,12 @@ function corsOrigin(): boolean | string[] {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const http = app.getHttpAdapter().getInstance() as {
-    set?: (key: string, value: unknown) => void;
-  };
-  http.set?.('trust proxy', 1);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
+
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/api/v1/files/',
+  });
 
   app.enableCors({ origin: corsOrigin() });
   app.setGlobalPrefix('api/v1');

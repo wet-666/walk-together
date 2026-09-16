@@ -1,7 +1,7 @@
 <template>
   <view v-if="profile" class="mine">
-    <view class="mine__card">
-      <wd-avatar :src="profile.avatarUrl || ''" :text="avatarText" size="large" />
+    <view class="mine__card" @click="goProfile">
+      <wd-avatar :src="avatarSrc" :text="avatarText" size="large" />
       <view class="mine__meta">
         <text class="mine__name">{{ profile.nickname }}</text>
         <text class="mine__phone">{{ maskPhone(profile.phone) }}</text>
@@ -10,6 +10,13 @@
     </view>
 
     <wd-cell-group border>
+      <wd-cell title="编辑资料" is-link @click="goProfile" />
+      <wd-cell
+        :title="profile.phone ? '更换手机号' : '绑定手机号'"
+        :value="profile.phone ? maskPhone(profile.phone) : '未绑定'"
+        is-link
+        @click="goBindPhone"
+      />
       <wd-cell title="车主认证" :value="certLabel" is-link @click="toastLater('车主认证下一阶段开通，认证前可先浏览')" />
       <wd-cell title="我的行程" value="组队后出现" is-link @click="goTrip" />
       <wd-cell title="设置" is-link @click="goSettings" />
@@ -40,6 +47,7 @@ import { computed, ref } from "vue";
 import type { UserProfile } from "@walk-together/shared-types";
 import EmptyState from "../../components/EmptyState.vue";
 import { getMe, logoutRequest } from "../../api/auth";
+import { resolveMediaUrl } from "../../config/env";
 import {
   clearSession,
   getProfile,
@@ -50,6 +58,7 @@ import {
 
 const profile = ref<UserProfile | null>(null);
 
+const avatarSrc = computed(() => resolveMediaUrl(profile.value?.avatarUrl));
 const avatarText = computed(() => profile.value?.nickname?.slice(0, 1) || "同");
 const certLabel = computed(() => {
   if (profile.value?.certStatus === CertStatus.APPROVED) {
@@ -77,7 +86,10 @@ async function refresh() {
     profile.value = result.data;
     return;
   }
-  if (result.code === ErrorCode.UNAUTHORIZED) {
+  if (
+    result.code === ErrorCode.UNAUTHORIZED ||
+    result.code === ErrorCode.ACCOUNT_DISABLED
+  ) {
     clearSession();
     profile.value = null;
   }
@@ -89,6 +101,14 @@ function goLogin() {
 
 function goSettings() {
   uni.navigateTo({ url: "/pages/mine/settings" });
+}
+
+function goProfile() {
+  uni.navigateTo({ url: "/pages/mine/profile" });
+}
+
+function goBindPhone() {
+  uni.navigateTo({ url: "/pages/mine/bind-phone" });
 }
 
 function goTrip() {

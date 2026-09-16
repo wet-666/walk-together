@@ -4,6 +4,8 @@
 
 当前阶段是 **M1 账号登录**：微信或手机验证码登录，「我的」能认出你，后续请求带 JWT。行程、地图 SDK、群聊还没有。
 
+H5 没密钥时仍可用开发验证码 `123456`。配了短信/微信密钥后走真通道；微信登录在小程序和 App，H5 只用短信。
+
 ## 本机怎么跑
 
 需要 Node 20+、pnpm、Docker Desktop。
@@ -22,6 +24,10 @@ pnpm dev:mobile
 - 本地 MySQL 映射到 **3307**（避免和本机已有 3306 冲突），Redis 仍是 6379
 
 小程序 / APP 真机不能走 Vite 代理。把 `apps/mobile/.env.development` 里的 `VITE_API_BASE_URL` 改成电脑局域网地址，例如 `http://192.168.1.8:3000/api/v1`。开发阶段请关闭小程序「校验合法域名」。
+
+真微信小程序登录：把 AppID 填进 `apps/mobile/src/manifest.json` 的 `mp-weixin.appid`，把 AppID/AppSecret 填进 `apps/api/.env` 的 `WECHAT_MINI_APP_ID` / `WECHAT_MINI_APP_SECRET`。App 微信登录另填 `WECHAT_APP_ID` / `WECHAT_APP_SECRET`，并在 HBuilderX 打包时带上微信登录原生 SDK；没开放平台时入口仍在，失败会提示用手机号。
+
+真短信：`SMS_PROVIDER` 默认 `aliyun`，还需 `SMS_TEMPLATE_CODE`（腾讯云再加 `SMS_SDK_APP_ID`）。密钥不要提交 git。
 
 ## 部署（M0 只交付 API + H5 反代）
 

@@ -6,7 +6,7 @@
     </view>
 
     <!-- #ifdef MP-WEIXIN || APP-PLUS -->
-    <wd-button type="primary" block :disabled="!agreed" @click="onWechatLogin">
+    <wd-button type="primary" block :disabled="!agreed || submitting" @click="onWechatLogin">
       微信一键登录
     </wd-button>
     <view class="login__split">
@@ -33,7 +33,7 @@
         :maxlength="6"
         clearable
       />
-      <wd-button size="small" plain :disabled="countdown > 0" @click="onSendSms">
+      <wd-button size="small" plain :disabled="countdown > 0 || sending" @click="onSendSms">
         {{ countdown > 0 ? `${countdown}s` : "获取验证码" }}
       </wd-button>
     </view>
@@ -58,15 +58,17 @@
 
 <script setup lang="ts">
 import { onLoad, onUnload } from "@dcloudio/uni-app";
-import { ErrorCode, WechatClient, type WechatClientValue } from "@walk-together/shared-types";
+import { ErrorCode, WechatClient, type UserProfile, type WechatClientValue } from "@walk-together/shared-types";
 import { onUnmounted, ref } from "vue";
 import { loginBySms, loginByWechat, sendSms } from "../../api/auth";
+import { CN_MOBILE } from "../../config/env";
 import { afterLoginRedirect, setSession } from "../../store/session";
 
 const phone = ref("");
 const code = ref("");
 const agreed = ref(false);
 const submitting = ref(false);
+const sending = ref(false);
 const countdown = ref(0);
 const redirect = ref("");
 const showDevHint = import.meta.env.DEV;
@@ -106,6 +108,14 @@ function assertAgreed(): boolean {
   return false;
 }
 
+function assertPhoneInput(): boolean {
+  if (CN_MOBILE.test(phone.value.trim())) {
+    return true;
+  }
+  uni.showToast({ title: "请输入 11 位手机号", icon: "none" });
+  return false;
+}
+
 function openAgreement(type: "user" | "privacy") {
   uni.navigateTo({ url: `/pages/mine/agreement?type=${type}` });
 }
@@ -117,11 +127,25 @@ function wechatClient(): WechatClientValue {
   return WechatClient.MINI;
 }
 
-async function onSendSms() {
-  if (!assertAgreed()) {
+function onWechatFail(err?: { errMsg?: string }) {
+  const msg = err?.errMsg || "";
+  if (/cancel|取消/i.test(msg)) {
+    uni.showToast({ title: "已取消微信登录", icon: "none" });
     return;
   }
-  const result = await sendSms({ phone: phone.value });
+  uni.showToast({ title: "微信登录暂不可用，请用手机号", icon: "none" });
+}
+
+async function onSendSms() {
+  if (!assertAgreed() || sending.value || countdown.value > 0) {
+    return;
+  }
+  if (!assertPhoneInput()) {
+    return;
+  }
+  sending.value = true;
+  const result = await sendSms({ phone: phone.value.trim() });
+  sending.value = false;
   if (result.code === ErrorCode.OK) {
     startCountdown();
     uni.showToast({ title: "验证码已发送", icon: "none" });
@@ -132,8 +156,15 @@ async function onSmsLogin() {
   if (!assertAgreed() || submitting.value) {
     return;
   }
+  if (!assertPhoneInput()) {
+    return;
+  }
+  if (!/^\d{6}$/.test(code.value.trim())) {
+    uni.showToast({ title: "请输入 6 位验证码", icon: "none" });
+    return;
+  }
   submitting.value = true;
-  const result = await loginBySms({ phone: phone.value, code: code.value });
+  const result = await loginBySms({ phone: phone.value.trim(), code: code.value.trim() });
   submitting.value = false;
   if (result.code === ErrorCode.OK && result.data) {
     setSession(result.data);
@@ -142,29 +173,98 @@ async function onSmsLogin() {
 }
 
 function onWechatLogin() {
-  if (!assertAgreed()) {
+  if (!assertAgreed() || submitting.value) {
     return;
   }
 
+  // #ifdef MP-WEIXIN
+  uni.getUserProfile({
+    desc: "用于完善同路行资料",
+    success: (info) => {
+      uni.login({
+        provider: "weixin",
+        success: (res) => {
+          void submitWechat(res.code, {
+            nickname: info.userInfo.nickName,
+            avatarUrl: info.userInfo.avatarUrl,
+          });
+        },
+        fail: onWechatFail,
+      });
+    },
+    fail: () => {
+      uni.login({
+        provider: "weixin",
+        success: (res) => {
+          void submitWechat(res.code);
+        },
+        fail: onWechatFail,
+      });
+    },
+  });
+  // #endif
+
+  // #ifdef APP-PLUS
   uni.login({
     provider: "weixin",
     success: (res) => {
-      void submitWechat(res.code);
+      uni.getUserInfo({
+        provider: "weixin",
+        success: (info) => {
+          void submitWechat(res.code, {
+            nickname: info.userInfo.nickName,
+            avatarUrl: info.userInfo.avatarUrl,
+          });
+        },
+        fail: () => {
+          void submitWechat(res.code);
+        },
+      });
     },
-    fail: () => {
-      uni.showToast({ title: "已取消微信登录", icon: "none" });
-    },
+    fail: onWechatFail,
   });
+  // #endif
 }
 
-async function submitWechat(wxCode: string) {
+async function submitWechat(
+  wxCode: string,
+  extra?: { nickname?: string; avatarUrl?: string },
+) {
   submitting.value = true;
-  const result = await loginByWechat({ code: wxCode, client: wechatClient() });
+  const result = await loginByWechat({
+    code: wxCode,
+    client: wechatClient(),
+    nickname: extra?.nickname,
+    avatarUrl: extra?.avatarUrl,
+  });
   submitting.value = false;
   if (result.code === ErrorCode.OK && result.data) {
     setSession(result.data);
-    afterLoginRedirect(redirect.value);
+    maybeCompleteWechatProfile(result.data.profile);
   }
+}
+
+function maybeCompleteWechatProfile(profile: UserProfile) {
+  // #ifdef MP-WEIXIN
+  const needProfile = /^同路人/.test(profile.nickname) || !profile.avatarUrl;
+  if (needProfile) {
+    uni.showModal({
+      title: "完善头像和昵称",
+      content: "微信不再直接返回头像昵称。完善后方便队友认出你。",
+      confirmText: "去完善",
+      cancelText: "稍后",
+      success: (res) => {
+        if (res.confirm) {
+          uni.redirectTo({ url: "/pages/mine/profile?from=login" });
+          return;
+        }
+        afterLoginRedirect(redirect.value);
+      },
+    });
+    return;
+  }
+  // #endif
+  afterLoginRedirect(redirect.value);
 }
 </script>
 

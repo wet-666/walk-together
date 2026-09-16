@@ -19,6 +19,8 @@ export interface UserProfile {
   phone: string | null;
   nickname: string;
   avatarUrl: string | null;
+  vehicleModel: string | null;
+  plateNumber: string | null;
   certStatus: CertStatusValue;
   createdAt: string;
 }
@@ -43,4 +45,16 @@ export interface LoginResult {
   token: string;
   expiresIn: number;
   profile: UserProfile;
+}
+
+export interface BindPhoneDto {
+  phone: string;
+  code: string;
+}
+
+export interface UpdateProfileDto {
+  nickname?: string;
+  avatarUrl?: string;
+  vehicleModel?: string;
+  plateNumber?: string;
 }
