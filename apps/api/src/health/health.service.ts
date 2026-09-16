@@ -26,7 +26,7 @@ export class HealthService {
         mysql: mysqlStatus,
         redis: redisStatus,
         uptime: process.uptime(),
-        version: this.config.get<string>('APP_VERSION', '0.1.0-m1'),
+        version: this.config.get<string>('APP_VERSION', '0.1.0-m3'),
       },
     };
   }

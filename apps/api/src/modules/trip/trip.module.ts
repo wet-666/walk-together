@@ -6,6 +6,6 @@ import { TripService } from './trip.service';
 @Module({
   controllers: [TripController],
   providers: [TripService, AmapService],
-  exports: [TripService],
+  exports: [TripService, AmapService],
 })
 export class TripModule {}

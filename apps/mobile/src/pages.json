@@ -9,7 +9,8 @@
     {
       "path": "pages/map/index",
       "style": {
-        "navigationBarTitleText": "同路行"
+        "navigationBarTitleText": "同路行",
+        "disableScroll": true
       }
     },
     {

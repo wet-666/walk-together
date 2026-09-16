@@ -23,6 +23,7 @@ export const ErrorCode = {
   TRIP_FULL: 1204,
   TRIP_ALREADY_MEMBER: 1205,
   TRIP_APPLY_INVALID: 1206,
+  LOCATION_INVALID: 1301,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

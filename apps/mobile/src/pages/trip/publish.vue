@@ -12,7 +12,7 @@
     </view>
 
     <view v-if="step === 1" class="publish__panel">
-      <text class="publish__lead">画路线：起点默认当前位置，途经点最多 5 个。地图选点下一阶段接高德。</text>
+      <text class="publish__lead">先填起点和终点，再点下一步。电脑没有定位就手填地名，例如「成都」「康定」。</text>
       <wd-input v-model="originName" placeholder="起点" :maxlength="64" clearable />
       <wd-button size="small" plain @click="useHere">用当前位置作起点</wd-button>
       <wd-input v-model="destName" placeholder="终点" :maxlength="64" clearable />
@@ -118,6 +118,7 @@ import {
 } from "@walk-together/shared-types";
 import { ref } from "vue";
 import { createTrip, uploadCover } from "../../api/trip";
+import { locateDevice } from "../../native/geolocation";
 
 const steps = [
   { n: 1, label: "画路线" },
@@ -166,19 +167,17 @@ onLoad(() => {
 });
 
 function useHere() {
-  uni.getLocation({
-    type: "gcj02",
-    success: (res) => {
-      originLng.value = res.longitude;
-      originLat.value = res.latitude;
-      if (!originName.value) {
-        originName.value = "当前位置";
-      }
-      uni.showToast({ title: "已填入当前位置", icon: "none" });
-    },
-    fail: () => {
+  void locateDevice().then((result) => {
+    if (!result.location) {
       uni.showToast({ title: "未拿到定位，请手填起点", icon: "none" });
-    },
+      return;
+    }
+    originLng.value = result.location.lng;
+    originLat.value = result.location.lat;
+    if (!originName.value) {
+      originName.value = "当前位置";
+    }
+    uni.showToast({ title: "已填入当前位置", icon: "none" });
   });
 }
 

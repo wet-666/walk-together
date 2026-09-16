@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { LocationGateway } from './modules/location/location.gateway';
 
 function corsOrigin(): boolean | string[] {
   const raw = process.env.CORS_ORIGIN?.trim();
@@ -31,6 +32,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, '0.0.0.0');
+  app.get(LocationGateway).attach(app.getHttpServer());
   console.log(`API listening on http://0.0.0.0:${port}/api/v1/health`);
 }
 

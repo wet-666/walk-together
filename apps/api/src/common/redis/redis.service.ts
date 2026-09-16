@@ -75,6 +75,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.clientOrThrow().ttl(key);
   }
 
+  async hset(key: string, field: string, value: string): Promise<void> {
+    await this.clientOrThrow().hset(key, field, value);
+  }
+
+  hgetall(key: string): Promise<Record<string, string>> {
+    return this.clientOrThrow().hgetall(key);
+  }
+
+  hdel(key: string, field: string): Promise<number> {
+    return this.clientOrThrow().hdel(key, field);
+  }
+
   private clientOrThrow(): Redis {
     if (!this.client) {
       throw new Error('Redis 未就绪');

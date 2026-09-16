@@ -38,6 +38,7 @@ import {
   createInviteCode,
   csv,
   haversineKm,
+  isLiveMemberStatus,
   isOpenStatus,
   mergeUpdate,
   normalizeCreate,
@@ -168,6 +169,44 @@ export class TripService {
       [userId],
     );
     return this.toSummaries(rows, { userId });
+  }
+
+  async getLiveMapContext(
+    userId: number,
+    tripId?: number,
+  ): Promise<{
+    tripId: number;
+    title: string;
+    status: TripStatusValue;
+    originName: string;
+    destName: string;
+    nodes: TripNode[];
+    members: TripMember[];
+  } | null> {
+    const trip = tripId ? await this.requireTrip(tripId) : await this.findActiveLiveTrip(userId);
+    if (!trip) {
+      return null;
+    }
+    if (!isOpenStatus(trip.status)) {
+      throw new BusinessException(ErrorCode.TRIP_FORBIDDEN, '行程已结束，不再同步位置');
+    }
+    const member = await this.findMember(Number(trip.id), userId);
+    if (!isLiveMemberStatus(member?.status)) {
+      throw new BusinessException(ErrorCode.TRIP_FORBIDDEN, '加入车队后才能看本队地图');
+    }
+    const [nodes, members] = await Promise.all([
+      this.listNodes(Number(trip.id)),
+      this.listMembers(Number(trip.id)),
+    ]);
+    return {
+      tripId: Number(trip.id),
+      title: trip.title,
+      status: trip.status,
+      originName: trip.origin_name,
+      destName: trip.dest_name,
+      nodes,
+      members: members.filter((item) => isLiveMemberStatus(item.status)),
+    };
   }
 
   async create(userId: number, dto: CreateTripDto): Promise<TripDetail> {
@@ -641,6 +680,22 @@ export class TripService {
       });
     }
     return filtered;
+  }
+
+  private async findActiveLiveTrip(userId: number): Promise<TripRow | null> {
+    const rows = await this.db.query<TripRow>(
+      `SELECT t.*, u.nickname AS captain_nickname
+       FROM trip_members mine
+       JOIN trips t ON t.id = mine.trip_id
+       JOIN users u ON u.id = t.captain_id
+       WHERE mine.user_id = ?
+         AND mine.status IN ('approved', 'leave_pending')
+         AND t.status IN ('recruiting', 'ongoing')
+       ORDER BY CASE t.status WHEN 'ongoing' THEN 0 ELSE 1 END, t.depart_at ASC
+       LIMIT 1`,
+      [userId],
+    );
+    return rows[0] ?? null;
   }
 
   private async requireTrip(tripId: number): Promise<TripRow> {

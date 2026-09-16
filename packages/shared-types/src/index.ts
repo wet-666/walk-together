@@ -30,3 +30,19 @@ export {
   TripPrivacy,
   TripStatus,
 } from './trip';
+export type {
+  GeoLngLat,
+  LocationPoint,
+  ReportLocationDto,
+  TripMapMember,
+  TripMapSnapshot,
+  WsClientMessage,
+  WsLocationEvent,
+  WsServerMessage,
+} from './location';
+export {
+  LOCATION_ONLINE_MS,
+  LOCATION_POLL_INTERVAL_MS,
+  LOCATION_REPORT_INTERVAL_MS,
+  LOCATION_STALE_MS,
+} from './location';

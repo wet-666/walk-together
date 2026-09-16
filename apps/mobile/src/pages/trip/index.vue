@@ -16,6 +16,9 @@
         >
           我的
         </text>
+        <wd-button size="small" type="primary" custom-class="trip__publish" @click="goPublish">
+          发布行程
+        </wd-button>
       </view>
       <view class="trip__search">
         <wd-input
@@ -70,7 +73,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ErrorCode, type TripSummary } from "@walk-together/shared-types";
 import { ref } from "vue";
 import EmptyState from "../../components/EmptyState.vue";
-import { formatDepartAt, listMine, listPlaza, memberLabel } from "../../api/trip";
+import { listMine, listPlaza, memberLabel, formatDepartAt } from "../../api/trip";
+import { locateDevice } from "../../native/geolocation";
 import { ensureLogin, isLoggedIn } from "../../store/session";
 
 const tab = ref<"plaza" | "mine">("plaza");
@@ -94,14 +98,10 @@ function switchTab(next: "plaza" | "mine") {
 }
 
 function locate() {
-  uni.getLocation({
-    type: "gcj02",
-    success: (res) => {
-      here.value = { lng: res.longitude, lat: res.latitude };
-    },
-    fail: () => {
-      here.value = null;
-    },
+  void locateDevice().then((result) => {
+    if (result.location) {
+      here.value = { lng: result.location.lng, lat: result.location.lat };
+    }
   });
 }
 
@@ -171,8 +171,13 @@ function statusText(item: TripSummary): string {
 
 .trip__tabs {
   display: flex;
+  align-items: center;
   gap: 24rpx;
   margin-bottom: 16rpx;
+}
+
+.trip__publish {
+  margin-left: auto;
 }
 
 .trip__tab {
@@ -256,8 +261,9 @@ function statusText(item: TripSummary): string {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
-  padding: 16rpx 48rpx calc(24rpx + env(safe-area-inset-bottom));
+  bottom: calc(var(--window-bottom, 50px) + 12px);
+  z-index: 20;
+  padding: 16rpx 48rpx calc(12rpx + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, transparent, #f4f6f8 30%);
 }
 </style>

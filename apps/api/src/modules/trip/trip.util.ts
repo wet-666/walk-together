@@ -279,6 +279,10 @@ export function isOpenStatus(status: TripStatusValue): boolean {
   return status === TripStatus.RECRUITING || status === TripStatus.ONGOING;
 }
 
+export function isLiveMemberStatus(status: MemberStatusValue | undefined): boolean {
+  return status === MemberStatus.APPROVED || status === MemberStatus.LEAVE_PENDING;
+}
+
 export function canReapply(status: MemberStatusValue | undefined): boolean {
   return !status || status === MemberStatus.REJECTED || status === MemberStatus.LEFT;
 }

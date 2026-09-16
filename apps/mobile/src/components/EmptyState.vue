@@ -11,6 +11,15 @@
     >
       {{ actionText }}
     </wd-button>
+    <wd-button
+      v-if="extraActionText"
+      plain
+      block
+      custom-class="empty__btn"
+      @click="emit('extra')"
+    >
+      {{ extraActionText }}
+    </wd-button>
   </view>
 </template>
 
@@ -19,10 +28,12 @@ defineProps<{
   title: string;
   description: string;
   actionText?: string;
+  extraActionText?: string;
 }>();
 
 const emit = defineEmits<{
   action: [];
+  extra: [];
 }>();
 </script>
 

@@ -68,9 +68,10 @@
         "usingComponents" : true,
         "permission" : {
             "scope.userLocation" : {
-                "desc" : "用于发布行程时默认填入起点"
+                "desc" : "用于在地图上显示你的位置并同步给队友"
             }
-        }
+        },
+        "requiredPrivateInfos" : ["getLocation"]
     },
     "mp-alipay" : {
         "usingComponents" : true
