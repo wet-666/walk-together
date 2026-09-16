@@ -21,32 +21,54 @@ export class JwtAuthGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    const request = context.switchToHttp().getRequest<GuardRequest>();
+    const token = this.readBearer(request.headers.authorization);
+
     if (isPublic) {
+      if (token) {
+        await this.attachUser(request, token, false);
+      }
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<GuardRequest>();
-    const token = this.readBearer(request.headers.authorization);
     if (!token) {
       throw BusinessException.unauthorized();
     }
-
-    const payload = this.tokens.verify(token);
-    if (await this.tokens.isRevoked(payload.jti)) {
-      throw BusinessException.unauthorized();
-    }
-    if (await this.tokens.isUserBlocked(payload.userId)) {
-      throw new BusinessException(
-        ErrorCode.ACCOUNT_DISABLED,
-        '账号已注销',
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    request.userId = payload.userId;
-    request.tokenJti = payload.jti;
-    request.tokenExp = payload.exp;
+    await this.attachUser(request, token, true);
     return true;
+  }
+
+  private async attachUser(
+    request: GuardRequest,
+    token: string,
+    required: boolean,
+  ): Promise<void> {
+    try {
+      const payload = this.tokens.verify(token);
+      if (await this.tokens.isRevoked(payload.jti)) {
+        if (required) {
+          throw BusinessException.unauthorized();
+        }
+        return;
+      }
+      if (await this.tokens.isUserBlocked(payload.userId)) {
+        if (required) {
+          throw new BusinessException(
+            ErrorCode.ACCOUNT_DISABLED,
+            '账号已注销',
+            HttpStatus.UNAUTHORIZED,
+          );
+        }
+        return;
+      }
+      request.userId = payload.userId;
+      request.tokenJti = payload.jti;
+      request.tokenExp = payload.exp;
+    } catch (error) {
+      if (required) {
+        throw error;
+      }
+    }
   }
 
   private readBearer(header: unknown): string | null {

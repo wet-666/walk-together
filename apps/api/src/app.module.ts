@@ -6,6 +6,7 @@ import { DatabaseModule } from './common/database/database.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RedisModule } from './common/redis/redis.module';
 import { HealthModule } from './health/health.module';
+import { TripModule } from './modules/trip/trip.module';
 import { UserModule } from './modules/user/user.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { UserModule } from './modules/user/user.module';
     TokenModule,
     HealthModule,
     UserModule,
+    TripModule,
   ],
   providers: [
     {

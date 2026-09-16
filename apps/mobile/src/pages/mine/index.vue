@@ -18,7 +18,7 @@
         @click="goBindPhone"
       />
       <wd-cell title="车主认证" :value="certLabel" is-link @click="toastLater('车主认证下一阶段开通，认证前可先浏览')" />
-      <wd-cell title="我的行程" value="组队后出现" is-link @click="goTrip" />
+      <wd-cell title="我的行程" value="去行程 Tab 查看" is-link @click="goTrip" />
       <wd-cell title="设置" is-link @click="goSettings" />
     </wd-cell-group>
 

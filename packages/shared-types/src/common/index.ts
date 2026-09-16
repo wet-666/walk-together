@@ -17,6 +17,12 @@ export const ErrorCode = {
   SMS_DAY_LIMIT: 1107,
   PROFILE_INVALID: 1108,
   PHONE_BIND_CONFLICT: 1109,
+  TRIP_INVALID: 1201,
+  TRIP_NOT_FOUND: 1202,
+  TRIP_FORBIDDEN: 1203,
+  TRIP_FULL: 1204,
+  TRIP_ALREADY_MEMBER: 1205,
+  TRIP_APPLY_INVALID: 1206,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

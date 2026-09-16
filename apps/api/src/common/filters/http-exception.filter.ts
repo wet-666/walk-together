@@ -4,12 +4,15 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ErrorCode, type ApiResult } from '@walk-together/shared-types';
 import type { Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
 
@@ -38,6 +41,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    this.logger.error(
+      exception instanceof Error ? exception.stack || exception.message : String(exception),
+    );
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       code: ErrorCode.FAILED,
       message: '服务异常',

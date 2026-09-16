@@ -43,6 +43,18 @@
       }
     },
     {
+      "path": "pages/trip/detail",
+      "style": {
+        "navigationBarTitleText": "行程详情"
+      }
+    },
+    {
+      "path": "pages/trip/copy",
+      "style": {
+        "navigationBarTitleText": "个人副本"
+      }
+    },
+    {
       "path": "pages/mine/settings",
       "style": {
         "navigationBarTitleText": "设置"

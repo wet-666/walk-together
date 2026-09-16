@@ -100,6 +100,7 @@ function requestOnce<T>(
       url: `${getApiBaseUrl()}${path}`,
       timeout: API_TIMEOUT_MS,
       header: {
+        "Content-Type": "application/json",
         ...options.header,
         ...tokenHeader(),
       },
