@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onLaunch } from "@dcloudio/uni-app";
+import { onLaunch, onShow } from "@dcloudio/uni-app";
 import { ErrorCode } from "@walk-together/shared-types";
 import { getMe } from "./api/auth";
+import { applyUnreadBadge, refreshUnreadBadge } from "./api/im";
+import { startChatInbox } from "./store/chat-inbox";
 import { clearSession, isLoggedIn, setProfile } from "./store/session";
 
 onLaunch(() => {
@@ -12,8 +14,10 @@ onLaunch(() => {
   });
 
   if (!isLoggedIn()) {
+    applyUnreadBadge(0);
     return;
   }
+  startChatInbox();
   void getMe().then((result) => {
     if (result.code === ErrorCode.OK && result.data) {
       setProfile(result.data);
@@ -26,6 +30,15 @@ onLaunch(() => {
       clearSession();
     }
   });
+});
+
+onShow(() => {
+  if (!isLoggedIn()) {
+    applyUnreadBadge(0);
+    return;
+  }
+  startChatInbox();
+  void refreshUnreadBadge();
 });
 </script>
 

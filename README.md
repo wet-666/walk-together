@@ -2,9 +2,13 @@
 
 自驾组队出行。第一期 MVP 只做：登录 → 建队 → 地图看见对方 → 群里说话。
 
-当前阶段是 **M3 地图位置**：组队之后，首页地图能看到自己、队友和本队路线。大约 5 秒上报一次；WebSocket 通的时候队友点会动，弱网改成 30 秒轮询。群聊还没有。
+当前阶段是 **M4 车队群聊**：入队后消息 Tab 会出现本队群，能发文字和图片。退队或被移除会自动退群。行程结束后群还在。WebSocket 通的时候新消息会立刻出现，弱网改成 30 秒轮询。
 
-H5 没密钥时仍可用开发验证码 `123456`。配了短信/微信密钥后走真通道。没配高德 JS Key 时，地图页用示意图，位置同步照样走。配了 `AMAP_WEB_KEY` 会把路线画成驾车折线。
+H5 没密钥时仍可用开发验证码 `123456`。配了短信/微信密钥后走真通道。
+
+地图分两把钥匙：后端 `AMAP_WEB_KEY` 负责地理编码和驾车折线；前端 `VITE_AMAP_JS_KEY`（可再配 `VITE_AMAP_JS_SECURITY`）负责 H5 可拖动底图和路名街区。没配 JS Key 时页面会退回示意图，位置同步照样走。改前端 Key 后必须重启 `pnpm dev:mobile`。高德控制台要把 `localhost`、`127.0.0.1` 加进该 JS Key 的域名白名单。默认缩放到你附近才能看清街区，点「看全程」才会缩到整条路线。
+
+群聊不依赖腾讯云 IM 密钥。没填 `IM_SDK_APP_ID` 时，消息走我们自己的接口和 WebSocket，H5 就能验入队进群、发图、退队退群。填了之后才会签发 UserSig，并在入队/退队时同步腾讯云 IM 群。
 
 ## 本机怎么跑
 
@@ -19,9 +23,11 @@ pnpm dev:mobile
 ```
 
 - 后端探活：http://127.0.0.1:3000/api/v1/health
-- 用户端 H5：http://localhost:5173/
-- 微信小程序开发：`pnpm dev:mp`，用微信开发者工具打开 `apps/mobile/dist/dev/mp-weixin`
+- 用户端 H5：http://localhost:5173/（浏览器里是网页版，不是微信小程序）
+- 微信小程序要在电脑上看：先安装[微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)，再执行 `pnpm dev:mp`，用开发者工具导入 `apps/mobile/dist/dev/mp-weixin`。没有正式 AppID 可用测试号；开发阶段关闭「不校验合法域名」
 - 本地 MySQL 映射到 **3307**（避免和本机已有 3306 冲突），Redis 仍是 6379
+
+小程序模拟器里的地图是微信原生组件（腾讯地图底图），可以拖动缩放。H5 用高德 JS API，观感接近，但不是同一个 SDK。
 
 小程序 / APP 真机不能走 Vite 代理。把 `apps/mobile/.env.development` 里的 `VITE_API_BASE_URL` 改成电脑局域网地址，例如 `http://192.168.1.8:3000/api/v1`。开发阶段请关闭小程序「校验合法域名」。
 

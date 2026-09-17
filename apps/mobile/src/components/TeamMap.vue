@@ -3,17 +3,26 @@
     <!-- #ifdef MP-WEIXIN || APP-PLUS -->
     <map
       class="team-map__native"
-      :latitude="centerLat"
-      :longitude="centerLng"
+      :latitude="viewLat"
+      :longitude="viewLng"
+      :scale="viewScale"
       :markers="nativeMarkers"
       :polyline="nativeLines"
-      :scale="12"
+      :include-points="includePoints"
+      :enable-scroll="true"
+      :enable-zoom="true"
       show-location
+      @regionchange="onNativeRegion"
     />
     <!-- #endif -->
 
     <!-- #ifdef H5 -->
-    <view v-show="engine === 'amap'" :id="canvasId" class="team-map__amap"></view>
+    <div
+      v-show="engine === 'amap'"
+      :id="canvasId"
+      ref="mapHost"
+      class="team-map__amap"
+    ></div>
     <view v-show="engine !== 'amap'" class="team-map__board">
       <image v-if="photoUrl" class="team-map__photo" :src="photoUrl" mode="aspectFit" />
       <svg class="team-map__svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
@@ -41,16 +50,21 @@
         </g>
       </svg>
       <text v-if="!hasGeometry" class="team-map__empty">还没有可画的坐标，队友上报后会出现点</text>
+      <text v-if="fallbackHint" class="team-map__fallback">{{ fallbackHint }}</text>
     </view>
     <!-- #endif -->
+    <view v-if="engine === 'amap' || engine === 'native'" class="team-map__tools">
+      <text class="team-map__tool" @click="focusSelf">回到我</text>
+      <text class="team-map__tool" @click="focusRoute">看全程</text>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import type { GeoLngLat, LocationPoint, TripMapSnapshot } from "@walk-together/shared-types";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { fetchTripBasemap } from "../api/location";
-import { getAmapJsKey, loadAmapJs, type AmapJsApi } from "../native/amap";
+import { getAmapJsKey, loadAmapJs, type AmapJsApi, type AmapMap, type AmapOverlay } from "../native/amap";
 
 const props = defineProps<{
   snapshot: TripMapSnapshot | null;
@@ -58,13 +72,24 @@ const props = defineProps<{
   selfUserId: number | null;
 }>();
 
+const emit = defineEmits<{
+  engine: [value: "amap" | "photo" | "schematic" | "native"];
+}>();
+
 const canvasId = `amap-${Math.random().toString(36).slice(2, 8)}`;
+const mapHost = ref<HTMLElement | null>(null);
 const engine = ref<"amap" | "photo" | "schematic" | "native">("schematic");
 const photoUrl = ref("");
+const fallbackHint = ref("");
+const viewLat = ref(30.67);
+const viewLng = ref(104.06);
+const viewScale = ref(15);
+const includePoints = ref<Array<{ latitude: number; longitude: number }>>([]);
 let photoTimer: ReturnType<typeof setTimeout> | null = null;
 let mapApi: AmapJsApi | null = null;
-let map: { setFitView: (overlays?: unknown[], immediately?: boolean, avoid?: number[]) => void; destroy: () => void } | null = null;
-let overlays: Array<{ setMap: (value: null) => void }> = [];
+let map: AmapMap | null = null;
+let overlays: AmapOverlay[] = [];
+let cameraReady = false;
 
 const routeColor = "#1D4F91";
 const dashed = computed(() => props.snapshot?.status === "recruiting");
@@ -135,6 +160,10 @@ function project(lng: number, lat: number) {
   return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) };
 }
 
+const nodeLine = computed(() =>
+  (props.snapshot?.nodes ?? []).filter((item) => item.lng != null && item.lat != null) as GeoLngLat[],
+);
+
 const svgPath = computed(() => {
   const line = (props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value) as GeoLngLat[];
   if (line.length < 2) {
@@ -147,10 +176,6 @@ const svgPath = computed(() => {
     })
     .join(" ");
 });
-
-const nodeLine = computed(() =>
-  (props.snapshot?.nodes ?? []).filter((item) => item.lng != null && item.lat != null) as GeoLngLat[],
-);
 
 const nodeMarks = computed(() =>
   (props.snapshot?.nodes ?? [])
@@ -189,8 +214,8 @@ const centerLng = computed(() => {
   return self?.lng ?? props.snapshot?.nodes.find((item) => item.lng != null)?.lng ?? 104.06;
 });
 
-const nativeMarkers = computed(() =>
-  props.members.map((item, index) => ({
+const nativeMarkers = computed(() => {
+  const people = props.members.map((item, index) => ({
     id: index + 1,
     latitude: item.lat,
     longitude: item.lng,
@@ -199,12 +224,29 @@ const nativeMarkers = computed(() =>
     height: 24,
     callout: {
       content: item.userId === props.selfUserId ? "我" : item.nickname,
-      display: "ALWAYS",
+      display: "ALWAYS" as const,
       padding: 6,
       borderRadius: 8,
     },
-  })),
-);
+  }));
+  const nodes = (props.snapshot?.nodes ?? [])
+    .filter((item) => item.lng != null && item.lat != null)
+    .map((item, index) => ({
+      id: 1000 + index,
+      latitude: item.lat as number,
+      longitude: item.lng as number,
+      title: item.kind === "origin" ? "起点" : item.kind === "dest" ? "终点" : item.name,
+      width: 18,
+      height: 18,
+      callout: {
+        content: item.kind === "origin" ? "起点" : item.kind === "dest" ? "终点" : item.name,
+        display: "ALWAYS" as const,
+        padding: 6,
+        borderRadius: 8,
+      },
+    }));
+  return [...nodes, ...people];
+});
 
 const nativeLines = computed(() => {
   const line = props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value;
@@ -221,21 +263,80 @@ const nativeLines = computed(() => {
   ];
 });
 
-async function setupAmap() {
-  if (getAmapJsKey()) {
-    mapApi = await loadAmapJs();
-    if (mapApi) {
-      engine.value = "amap";
-      map = new mapApi.Map(canvasId, {
-        zoom: 11,
-        center: [centerLng.value, centerLat.value],
-        viewMode: "2D",
-      });
-      redrawAmap();
-      return;
+function resolveHost(): HTMLElement | null {
+  const raw = mapHost.value as unknown;
+  if (raw instanceof HTMLElement) {
+    return raw;
+  }
+  if (raw && typeof raw === "object" && "$el" in raw) {
+    const el = (raw as { $el?: unknown }).$el;
+    if (el instanceof HTMLElement) {
+      return el;
     }
   }
-  await loadPhoto();
+  return document.getElementById(canvasId);
+}
+
+function streetCenter(): [number, number] {
+  return [centerLng.value, centerLat.value];
+}
+
+async function setupAmap() {
+  if (!getAmapJsKey()) {
+    fallbackHint.value = "当前是示意图。配上高德 JS Key 后就能拖动查看路名和街区。";
+    await loadPhoto();
+    return;
+  }
+  fallbackHint.value = "正在加载高德底图…";
+  engine.value = "amap";
+  await nextTick();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  mapApi = await loadAmapJs();
+  const host = resolveHost();
+  if (!mapApi || !host) {
+    fallbackHint.value = "高德底图没加载成功，先用示意图。检查 JS Key、安全密钥和域名白名单。";
+    await loadPhoto();
+    return;
+  }
+  map = new mapApi.Map(host, {
+    zoom: 15,
+    center: streetCenter(),
+    viewMode: "2D",
+    dragEnable: true,
+    zoomEnable: true,
+    doubleClickZoom: true,
+    scrollWheel: true,
+    showLabel: true,
+  });
+  try {
+    mapApi.plugin?.(["AMap.Scale", "AMap.ToolBar"], () => {
+      if (!map || !mapApi) {
+        return;
+      }
+      if (mapApi.Scale) {
+        map.addControl(new mapApi.Scale({ position: "LB" }));
+      }
+      if (mapApi.ToolBar) {
+        map.addControl(new mapApi.ToolBar({ position: "LT" }));
+      }
+    });
+  } catch {
+    // 控件失败不影响底图拖动和路名
+  }
+  map.on("complete", () => {
+    redrawAmap();
+    if (!cameraReady) {
+      focusSelf();
+      cameraReady = true;
+    }
+  });
+  redrawAmap();
+  window.setTimeout(() => {
+    if (!cameraReady && map) {
+      focusSelf();
+      cameraReady = true;
+    }
+  }, 800);
 }
 
 async function loadPhoto() {
@@ -256,6 +357,7 @@ async function loadPhoto() {
   }
   photoUrl.value = next;
   engine.value = "photo";
+  fallbackHint.value = "当前是静态底图，不能拖动。配上 JS Key 后可查看街区。";
 }
 
 function queuePhoto() {
@@ -285,14 +387,33 @@ function redrawAmap() {
       strokeColor: routeColor,
       strokeWeight: 6,
       strokeStyle: dashed.value ? "dashed" : "solid",
+      lineJoin: "round",
+      lineCap: "round",
     });
     poly.setMap(map);
     overlays.push(poly);
+  }
+  for (const node of props.snapshot?.nodes ?? []) {
+    if (node.lng == null || node.lat == null) {
+      continue;
+    }
+    const marker = new mapApi.Marker({
+      position: [node.lng, node.lat],
+      title: node.name,
+      zIndex: 110,
+      label: {
+        content: node.kind === "dest" ? "终点" : node.kind === "origin" ? "起点" : node.name.slice(0, 6),
+        direction: "bottom",
+      },
+    });
+    marker.setMap(map);
+    overlays.push(marker);
   }
   for (const member of props.members) {
     const marker = new mapApi.Marker({
       position: [member.lng, member.lat],
       title: member.nickname,
+      zIndex: 120,
       label: {
         content: member.userId === props.selfUserId ? "我" : member.nickname.slice(0, 4),
         direction: "top",
@@ -301,8 +422,35 @@ function redrawAmap() {
     marker.setMap(map);
     overlays.push(marker);
   }
-  map.setFitView(overlays, false, [48, 48, 160, 48]);
 }
+
+function focusSelf() {
+  includePoints.value = [];
+  viewLat.value = centerLat.value;
+  viewLng.value = centerLng.value;
+  viewScale.value = 15;
+  map?.setZoomAndCenter(15, streetCenter(), false);
+}
+
+function focusRoute() {
+  const line = props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value;
+  const points = [
+    ...line.map((item) => ({ latitude: item.lat, longitude: item.lng })),
+    ...props.members.map((item) => ({ latitude: item.lat, longitude: item.lng })),
+  ];
+  includePoints.value = points;
+  if (map && overlays.length) {
+    map.setFitView(overlays, false, [72, 48, 140, 48]);
+  }
+}
+
+function onNativeRegion(event: { detail?: { type?: string; causedBy?: string } }) {
+  if (event.detail?.type === "end" && event.detail.causedBy === "gesture") {
+    includePoints.value = [];
+  }
+}
+
+watch(engine, (value) => emit("engine", value), { immediate: true });
 
 watch(
   () => [props.members, props.snapshot],
@@ -323,12 +471,26 @@ watch(
   },
 );
 
+watch(
+  [centerLat, centerLng],
+  ([lat, lng]) => {
+    if (!cameraReady && Number.isFinite(lat) && Number.isFinite(lng)) {
+      viewLat.value = lat;
+      viewLng.value = lng;
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   // #ifdef H5
   void setupAmap();
   // #endif
   // #ifdef MP-WEIXIN || APP-PLUS
   engine.value = "native";
+  viewLat.value = centerLat.value;
+  viewLng.value = centerLng.value;
+  cameraReady = true;
   // #endif
 });
 
@@ -344,6 +506,8 @@ onBeforeUnmount(() => {
   map?.destroy();
   map = null;
 });
+
+defineExpose({ focusSelf, focusRoute });
 </script>
 
 <style scoped>
@@ -356,7 +520,12 @@ onBeforeUnmount(() => {
 }
 
 .team-map {
+  position: relative;
   background: #d7e3ef;
+}
+
+.team-map__amap {
+  touch-action: none;
 }
 
 .team-map__board {
@@ -379,23 +548,48 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.team-map__svg {
-  width: 100%;
-  height: 100%;
-}
-
 .team-map__label {
   font-size: 3px;
   fill: #111827;
 }
 
-.team-map__empty {
+.team-map__empty,
+.team-map__fallback {
   position: absolute;
   left: 32rpx;
   right: 32rpx;
-  bottom: 32rpx;
-  color: #6b7280;
-  font-size: 24rpx;
+  color: #4b5563;
+  font-size: 22rpx;
   text-align: center;
+}
+
+.team-map__empty {
+  bottom: 32rpx;
+}
+
+.team-map__fallback {
+  bottom: 88rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.team-map__tools {
+  position: absolute;
+  left: 24rpx;
+  bottom: 24rpx;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.team-map__tool {
+  padding: 12rpx 20rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1d4f91;
+  font-size: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.12);
 }
 </style>

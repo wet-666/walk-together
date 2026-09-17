@@ -214,5 +214,60 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         KEY idx_copy_nodes (copy_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS im_messages (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        trip_id BIGINT UNSIGNED NOT NULL,
+        sender_id BIGINT UNSIGNED NULL,
+        type VARCHAR(16) NOT NULL,
+        content TEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_im_messages_trip_id (trip_id, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS im_read_cursors (
+        trip_id BIGINT UNSIGNED NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        last_read_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (trip_id, user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await this.ensureColumn('trips', 'im_group_id', 'VARCHAR(64) NULL');
+    await this.shiftUtcChatTimestamps();
+  }
+
+  private async shiftUtcChatTimestamps(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS schema_patches (
+        name VARCHAR(64) NOT NULL PRIMARY KEY,
+        applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    try {
+      await this.exec('INSERT INTO schema_patches (name) VALUES (?)', ['im_messages_created_at_cst']);
+    } catch (error) {
+      const code = (error as { errno?: number } | null)?.errno;
+      if (code === 1062) {
+        return;
+      }
+      throw error;
+    }
+    await this.exec('UPDATE im_messages SET created_at = DATE_ADD(created_at, INTERVAL 8 HOUR)');
+  }
+
+  private async ensureColumn(table: string, column: string, definition: string): Promise<void> {
+    try {
+      await this.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    } catch (error) {
+      const code = (error as { errno?: number; code?: string } | null)?.errno;
+      if (code !== 1060) {
+        throw error;
+      }
+    }
   }
 }

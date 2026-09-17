@@ -35,7 +35,7 @@
     <EmptyState
       v-else-if="!items.length"
       :title="tab === 'mine' ? '还没有自己的行程' : '还没有可加入的行程'"
-      description="发布一条路线，邀请另一辆车加入。两人成队之后，地图和群聊才会有内容。"
+      description="发布一条路线，邀请另一辆车加入。成队之后，地图页就能看见彼此位置和本队路线。"
       action-text="发布行程"
       @action="goPublish"
     />

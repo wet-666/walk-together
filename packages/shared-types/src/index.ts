@@ -46,3 +46,14 @@ export {
   LOCATION_REPORT_INTERVAL_MS,
   LOCATION_STALE_MS,
 } from './location';
+export type {
+  ChatConversation,
+  ChatMessage,
+  ChatMessageTypeValue,
+  ChatReadCursor,
+  ImCredentials,
+  SendChatTextDto,
+  WsChatEvent,
+  WsChatReadEvent,
+} from './im';
+export { CHAT_HISTORY_LIMIT, CHAT_POLL_INTERVAL_MS, CHAT_TEXT_MAX_LENGTH, ChatMessageType } from './im';

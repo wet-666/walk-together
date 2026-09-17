@@ -1,3 +1,4 @@
+import type { WsChatEvent, WsChatReadEvent } from '../im';
 import type { MemberRoleValue, TripNode, TripStatusValue } from '../trip';
 
 export const LOCATION_REPORT_INTERVAL_MS = 5000;
@@ -62,6 +63,8 @@ export interface WsLocationEvent {
 export type WsClientMessage =
   | { type: 'subscribe'; tripId: number }
   | { type: 'unsubscribe' }
+  | { type: 'chat.subscribe'; tripId: number }
+  | { type: 'chat.unsubscribe' }
   | { type: 'ping' };
 
 export type WsServerMessage =
@@ -69,4 +72,6 @@ export type WsServerMessage =
   | { type: 'pong' }
   | { type: 'snapshot'; data: TripMapSnapshot }
   | WsLocationEvent
+  | WsChatEvent
+  | WsChatReadEvent
   | { type: 'error'; code: number; message: string };

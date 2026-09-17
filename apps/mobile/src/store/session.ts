@@ -1,4 +1,5 @@
 import type { LoginResult, UserProfile } from "@walk-together/shared-types";
+import { startChatInbox, stopChatInbox } from "./chat-inbox";
 
 const TOKEN_KEY = "token";
 const PROFILE_KEY = "profile";
@@ -25,6 +26,7 @@ export function getProfile(): UserProfile | null {
 export function setSession(result: LoginResult): void {
   uni.setStorageSync(TOKEN_KEY, result.token);
   uni.setStorageSync(PROFILE_KEY, result.profile);
+  startChatInbox();
 }
 
 export function setProfile(profile: UserProfile): void {
@@ -32,6 +34,7 @@ export function setProfile(profile: UserProfile): void {
 }
 
 export function clearSession(): void {
+  stopChatInbox();
   uni.removeStorageSync(TOKEN_KEY);
   uni.removeStorageSync(PROFILE_KEY);
 }

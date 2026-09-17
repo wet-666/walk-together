@@ -1,6 +1,6 @@
 # API
 
-NestJS 中台。当前到 M3：账号登录 + 行程组队 + 位置同步。
+NestJS 中台。当前到 M4：账号登录 + 行程组队 + 位置同步 + 车队群聊。
 
 账号：
 
@@ -32,6 +32,17 @@ NestJS 中台。当前到 M3：账号登录 + 行程组队 + 位置同步。
 - `GET /api/v1/location/active` 当前可同步的行程地图快照
 - `GET /api/v1/location/:tripId` 指定行程快照（需已入队）
 - `POST /api/v1/location/:tripId` 上报经纬度
-- `WS /api/v1/ws?token=` 按行程房间推送队友点
+- `WS /api/v1/ws?token=` 按行程房间推送队友点和群聊
 
-本地开发默认 `AUTH_DEV_MODE=true`，短信验证码为 `123456`。配齐短信密钥后走真短信。`AMAP_WEB_KEY` 选填，有则发布时把地点地理编码成经纬度，地图上画驾车路线；没有就只存地名，地图用成员点和直线。`AMAP_JS_KEY` 给 H5 底图，没填时前端用示意图。
+群聊：
+
+- `GET /api/v1/im/credentials` 腾讯云 IM UserSig（没配密钥则 `enabled: false`）
+- `GET /api/v1/im/unread` 未读总数
+- `GET /api/v1/im/conversations` 我的车队群列表
+- `GET /api/v1/im/trips/:tripId` 指定车队群
+- `GET /api/v1/im/trips/:tripId/messages` 历史消息
+- `POST /api/v1/im/trips/:tripId/messages` 发文字
+- `POST /api/v1/im/trips/:tripId/images` 发图片
+- `POST /api/v1/im/trips/:tripId/read` 标记已读
+
+本地开发默认 `AUTH_DEV_MODE=true`，短信验证码为 `123456`。配齐短信密钥后走真短信。`AMAP_WEB_KEY` 选填，有则发布时把地点地理编码成经纬度，地图上画驾车路线；没有就只存地名，地图用成员点和直线。H5 可拖动底图走前端 `VITE_AMAP_JS_KEY`，没填时用示意图。`IM_SDK_APP_ID` / `IM_SECRET_KEY` 选填，没有时群聊仍走本服务；有则签发 UserSig，并在入队/退队时同步腾讯云 IM 群。

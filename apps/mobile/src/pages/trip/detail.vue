@@ -80,6 +80,7 @@
     <view v-if="myStatus === 'leave_pending'" class="detail__hint">退出申请已提交，等待队长审批。</view>
 
     <view class="detail__actions">
+      <wd-button v-if="isMember" type="primary" plain block @click="goChat">打开车队群聊</wd-button>
       <wd-button v-if="isMember" plain block @click="goCopy">个人副本</wd-button>
       <wd-button v-if="isMember && !isCaptain" plain block @click="onLeave">申请退出</wd-button>
       <wd-button v-if="isCaptain && detail.status === 'recruiting'" type="primary" block @click="onStart">开始行程</wd-button>
@@ -212,6 +213,10 @@ async function onCancel() {
       }
     },
   });
+}
+
+function goChat() {
+  uni.navigateTo({ url: `/pages/message/chat?id=${tripId.value}` });
 }
 
 function goCopy() {

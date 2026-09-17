@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { DatabaseService, type DbOps } from '../../common/database/database.service';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { AmapService } from './amap.service';
+import { TripEventHub } from './trip-event.hub';
 import {
   asNodeKind,
   assertAnnouncement,
@@ -113,6 +114,7 @@ export class TripService {
   constructor(
     private readonly db: DatabaseService,
     private readonly amap: AmapService,
+    private readonly events: TripEventHub,
   ) {}
 
   async listPlaza(query: {
@@ -256,6 +258,7 @@ export class TripService {
       await this.createCopyFromTrip(ops, id, userId, origin, waypoints, destination);
       return id;
     });
+    this.events.emit({ type: 'created', tripId, userId, title: input.title });
     return this.detail(tripId, userId);
   }
 
@@ -361,6 +364,7 @@ export class TripService {
       throw tripInvalid('行程已结束');
     }
     await this.db.exec(`UPDATE trips SET status = 'ended' WHERE id = ?`, [tripId]);
+    this.events.emit({ type: 'ended', tripId });
     return this.detail(tripId, userId);
   }
 
@@ -483,6 +487,9 @@ export class TripService {
         `UPDATE trip_members SET status = ? WHERE trip_id = ? AND user_id = ?`,
         [action === 'approve' ? MemberStatus.LEFT : MemberStatus.APPROVED, tripId, targetUserId],
       );
+      if (action === 'approve') {
+        this.events.emit({ type: 'left', tripId, userId: targetUserId, reason: 'left' });
+      }
       return this.detail(tripId, captainId);
     }
 
@@ -514,6 +521,7 @@ export class TripService {
         await this.createCopyFromNodes(ops, tripId, targetUserId, nodes);
       }
     });
+    this.events.emit({ type: 'joined', tripId, userId: targetUserId });
     return this.detail(tripId, captainId);
   }
 
@@ -554,6 +562,7 @@ export class TripService {
       `UPDATE trip_members SET status = 'removed' WHERE trip_id = ? AND user_id = ?`,
       [tripId, targetUserId],
     );
+    this.events.emit({ type: 'left', tripId, userId: targetUserId, reason: 'removed' });
     return this.detail(tripId, captainId);
   }
 

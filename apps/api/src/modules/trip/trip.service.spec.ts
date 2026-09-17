@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { ErrorCode, MemberStatus } from '@walk-together/shared-types';
 import { DatabaseService } from '../../common/database/database.service';
 import { AmapService } from './amap.service';
+import { TripEventHub } from './trip-event.hub';
 import { TripService } from './trip.service';
 
 describe('TripService.apply', () => {
@@ -21,6 +22,7 @@ describe('TripService.apply', () => {
         TripService,
         { provide: DatabaseService, useValue: db },
         { provide: AmapService, useValue: amap },
+        { provide: TripEventHub, useValue: { emit: jest.fn() } },
       ],
     }).compile();
     trips = module.get(TripService);

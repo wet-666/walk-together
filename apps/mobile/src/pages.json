@@ -20,6 +20,13 @@
       }
     },
     {
+      "path": "pages/message/chat",
+      "style": {
+        "navigationBarTitleText": "车队群聊",
+        "disableScroll": true
+      }
+    },
+    {
       "path": "pages/trip/index",
       "style": {
         "navigationBarTitleText": "行程"

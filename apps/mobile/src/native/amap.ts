@@ -1,23 +1,46 @@
+export type AmapOverlay = {
+  setMap: (map: AmapMap | null) => void;
+};
+
 export type AmapJsApi = {
   Map: new (
     container: string | HTMLElement,
-    options: { zoom?: number; center?: [number, number]; viewMode?: string },
+    options: {
+      zoom?: number;
+      center?: [number, number];
+      viewMode?: string;
+      dragEnable?: boolean;
+      zoomEnable?: boolean;
+      doubleClickZoom?: boolean;
+      scrollWheel?: boolean;
+      showLabel?: boolean;
+      mapStyle?: string;
+    },
   ) => AmapMap;
   Marker: new (options: {
     position: [number, number];
     title?: string;
+    zIndex?: number;
     label?: { content: string; direction: string };
-  }) => { setMap: (map: AmapMap | null) => void; setPosition: (position: [number, number]) => void };
+  }) => AmapOverlay & { setPosition: (position: [number, number]) => void };
   Polyline: new (options: {
     path: Array<[number, number]>;
     strokeColor?: string;
     strokeWeight?: number;
     strokeStyle?: string;
-  }) => { setMap: (map: AmapMap | null) => void; setPath: (path: Array<[number, number]>) => void };
+    lineJoin?: string;
+    lineCap?: string;
+  }) => AmapOverlay & { setPath: (path: Array<[number, number]>) => void };
+  Scale?: new (options?: { position?: string }) => unknown;
+  ToolBar?: new (options?: { position?: string }) => unknown;
+  plugin?: (name: string | string[], callback: () => void) => void;
 };
 
-type AmapMap = {
+export type AmapMap = {
   setFitView: (overlays?: unknown[], immediately?: boolean, avoid?: number[]) => void;
+  setZoomAndCenter: (zoom: number, center: [number, number], immediately?: boolean) => void;
+  addControl: (control: unknown) => void;
+  on: (event: string, handler: () => void) => void;
   destroy: () => void;
 };
 
@@ -39,7 +62,7 @@ export function loadAmapJs(): Promise<AmapJsApi | null> {
   if (!key) {
     return Promise.resolve(null);
   }
-  if (window.AMap) {
+  if (window.AMap?.Map) {
     return Promise.resolve(window.AMap);
   }
   if (loading) {
@@ -50,12 +73,27 @@ export function loadAmapJs(): Promise<AmapJsApi | null> {
     if (security) {
       window._AMapSecurityConfig = { securityJsCode: security };
     }
+    const callback = `__amapOnLoad${Date.now()}`;
+    let settled = false;
+    const finish = (api: AmapJsApi | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      delete (window as unknown as Record<string, unknown>)[callback];
+      resolve(api);
+    };
+    (window as unknown as Record<string, unknown>)[callback] = () => {
+      finish(window.AMap?.Map ? window.AMap : null);
+    };
     const script = document.createElement("script");
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}`;
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&callback=${callback}`;
     script.async = true;
-    script.onload = () => resolve(window.AMap ?? null);
-    script.onerror = () => resolve(null);
+    script.onerror = () => finish(null);
     document.head.appendChild(script);
+    window.setTimeout(() => {
+      finish(window.AMap?.Map ? window.AMap : null);
+    }, 12000);
   });
   return loading;
 }

@@ -21,7 +21,12 @@
     </view>
 
     <view v-else class="map-page__stage">
-      <TeamMap :snapshot="snapshot" :members="members" :self-user-id="selfUserId" />
+      <TeamMap
+        :snapshot="snapshot"
+        :members="members"
+        :self-user-id="selfUserId"
+        @engine="onMapEngine"
+      />
 
       <view class="map-page__hud">
         <view class="map-page__title">
@@ -30,6 +35,7 @@
         </view>
         <text class="map-page__route">{{ snapshot.originName }} → {{ snapshot.destName }}</text>
         <text class="map-page__hint">{{ locateHint }}</text>
+        <text class="map-page__hint">{{ mapHint }}</text>
         <view class="map-page__people">
           <text v-for="item in memberLabels" :key="item.userId" class="map-page__chip">
             {{ item.text }}
@@ -75,6 +81,7 @@ import { ensureLogin, getProfile, getToken, isLoggedIn } from "../../store/sessi
 const loggedIn = ref(false);
 const snapshot = ref<TripMapSnapshot | null>(null);
 const members = ref<LocationPoint[]>([]);
+const mapEngine = ref<"amap" | "photo" | "schematic" | "native">("schematic");
 const sync = ref<"ws" | "poll" | "offline">("offline");
 const east = ref(0);
 const north = ref(0);
@@ -88,8 +95,22 @@ const locateHint = computed(() => {
   if (locateStatus.value === "denied") {
     return "浏览器拒绝了定位。允许定位，或用下面方向键移动自己（不会改路线）。";
   }
-  return "电脑通常拿不到 GPS。路线来自高德，点下面方向键可移动自己的位置。";
+  return "电脑通常拿不到 GPS。点方向键只移动自己的点，不会改路线。";
 });
+
+const mapHint = computed(() => {
+  if (mapEngine.value === "amap" || mapEngine.value === "native") {
+    return "可拖动、双指/滚轮缩放。默认看当前位置附近街区，点「看全程」才缩到整条路线。";
+  }
+  if (mapEngine.value === "photo") {
+    return "现在是静态底图。要拖动看路名，需要高德 JS Key 生效。";
+  }
+  return "现在是示意图。H5 需要配置高德 JS Key 才会出现可拖动的街区底图。";
+});
+
+function onMapEngine(value: "amap" | "photo" | "schematic" | "native") {
+  mapEngine.value = value;
+}
 
 const padTitle = computed(() =>
   locateStatus.value === "gps" ? "微调我的位置" : "电脑没定位时，点这里移动自己",
@@ -357,9 +378,16 @@ async function publishLocation() {
   left: 24rpx;
   right: 24rpx;
   top: 24rpx;
+  z-index: 2;
   padding: 20rpx 24rpx;
   border-radius: 20rpx;
   background: rgba(255, 255, 255, 0.94);
+  pointer-events: none;
+}
+
+.map-page__hud :deep(button),
+.map-page__hud :deep(.wd-tag) {
+  pointer-events: auto;
 }
 
 .map-page__title {
