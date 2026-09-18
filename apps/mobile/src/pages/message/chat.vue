@@ -1,5 +1,5 @@
 <template>
-  <view class="chat">
+  <view class="chat" :style="frameStyle">
     <view v-if="blocked" class="chat__empty">
       <EmptyState
         title="不在这支车队里"
@@ -10,59 +10,63 @@
     </view>
 
     <template v-else>
-      <scroll-view
-        class="chat__scroller"
-        scroll-y
-        :scroll-into-view="anchor"
-        :scroll-with-animation="true"
-        @scrolltoupper="loadOlder"
-      >
-        <view v-if="loadingOlder" class="chat__more">加载更早的消息…</view>
-        <view
-          v-for="item in messages"
-          :id="'m-' + item.id"
-          :key="item.id"
-          class="chat__item"
-          :class="itemClass(item)"
+      <view class="chat__body">
+        <scroll-view
+          class="chat__scroller"
+          scroll-y
+          :scroll-into-view="anchor"
+          :scroll-with-animation="true"
+          @scrolltoupper="loadOlder"
         >
-          <view v-if="item.type === 'system'" class="chat__system">
-            <text class="chat__system-text">{{ item.content }}</text>
+          <view class="chat__list">
+            <view v-if="loadingOlder" class="chat__more">加载更早的消息…</view>
+            <view
+              v-for="item in messages"
+              :id="'m-' + item.id"
+              :key="item.id"
+              class="chat__item"
+              :class="itemClass(item)"
+            >
+              <view v-if="item.type === 'system'" class="chat__system">
+                <text class="chat__system-text">{{ item.content }}</text>
+              </view>
+              <template v-else>
+                <view class="chat__avatar">
+                  <image
+                    v-if="avatarSrc(item)"
+                    class="chat__avatar-img"
+                    mode="aspectFill"
+                    :src="avatarSrc(item)"
+                  />
+                  <view v-else class="chat__avatar-fallback">
+                    <text class="chat__avatar-letter">{{ avatarText(item) }}</text>
+                  </view>
+                </view>
+                <view class="chat__main">
+                  <view class="chat__name">
+                    <text class="chat__name-text">{{ item.mine ? "我" : item.senderNickname }}</text>
+                  </view>
+                  <image
+                    v-if="item.type === 'image'"
+                    class="chat__image"
+                    mode="widthFix"
+                    :src="mediaUrl(item.content)"
+                    @click="preview(item.content)"
+                  />
+                  <view v-else class="chat__bubble">
+                    <text class="chat__bubble-text" selectable>{{ item.content }}</text>
+                  </view>
+                  <view class="chat__meta">
+                    <text v-if="receiptText(item)" class="chat__read">{{ receiptText(item) }}</text>
+                    <text class="chat__time">{{ formatChatTime(item.createdAt) }}</text>
+                  </view>
+                </view>
+              </template>
+            </view>
+            <view id="chat-end" />
           </view>
-          <template v-else>
-            <view class="chat__avatar">
-              <image
-                v-if="avatarSrc(item)"
-                class="chat__avatar-img"
-                mode="aspectFill"
-                :src="avatarSrc(item)"
-              />
-              <view v-else class="chat__avatar-fallback">
-                <text class="chat__avatar-letter">{{ avatarText(item) }}</text>
-              </view>
-            </view>
-            <view class="chat__main">
-              <view class="chat__name">
-                <text class="chat__name-text">{{ item.mine ? "我" : item.senderNickname }}</text>
-              </view>
-              <image
-                v-if="item.type === 'image'"
-                class="chat__image"
-                mode="widthFix"
-                :src="mediaUrl(item.content)"
-                @click="preview(item.content)"
-              />
-              <view v-else class="chat__bubble">
-                <text class="chat__bubble-text" selectable>{{ item.content }}</text>
-              </view>
-              <view class="chat__meta">
-                <text v-if="receiptText(item)" class="chat__read">{{ receiptText(item) }}</text>
-                <text class="chat__time">{{ formatChatTime(item.createdAt) }}</text>
-              </view>
-            </view>
-          </template>
-        </view>
-        <view id="chat-end" />
-      </scroll-view>
+        </scroll-view>
+      </view>
 
       <view class="chat__bar">
         <wd-button size="small" plain @click="pickImage">图片</wd-button>
@@ -80,14 +84,14 @@
 </template>
 
 <script setup lang="ts">
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { onHide, onLoad, onReady, onShow, onUnload } from "@dcloudio/uni-app";
 import {
   CHAT_POLL_INTERVAL_MS,
   ErrorCode,
   type ChatMessage,
   type WsServerMessage,
 } from "@walk-together/shared-types";
-import { nextTick, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import {
   getConversation,
   listMessages,
@@ -105,6 +109,10 @@ import { formatChatTime } from "../../utils/datetime";
 
 const tripId = ref(0);
 const blocked = ref(false);
+const frameHeight = ref(0);
+const frameStyle = computed(() =>
+  frameHeight.value ? { height: `${frameHeight.value}px` } : undefined,
+);
 const sending = ref(false);
 const loadingOlder = ref(false);
 const noMore = ref(false);
@@ -124,7 +132,12 @@ onLoad((query) => {
   tripId.value = Number(query?.id || 0);
 });
 
+onReady(() => {
+  measureFrame();
+});
+
 onShow(() => {
+  measureFrame();
   setActiveChatTripId(tripId.value);
   offInboxChat?.();
   offInboxRead?.();
@@ -158,6 +171,10 @@ onUnload(() => {
   offInboxRead = null;
   stopLive();
 });
+
+function measureFrame() {
+  frameHeight.value = uni.getSystemInfoSync().windowHeight;
+}
 
 async function bootstrap() {
   if (!isLoggedIn() || !tripId.value) {
@@ -400,20 +417,37 @@ function goBack() {
 
 <style scoped>
 .chat {
-  height: 100vh;
+  height: calc(100vh - var(--window-top, 44px) - var(--window-bottom, 0px));
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: #f4f6f8;
+  box-sizing: border-box;
 }
 
 .chat__empty {
   flex: 1;
+  min-height: 0;
+}
+
+.chat__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .chat__scroller {
-  flex: 1;
-  height: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
+  height: 100%;
+}
+
+.chat__list {
   padding: 16rpx 24rpx 12rpx;
   box-sizing: border-box;
 }
@@ -570,11 +604,13 @@ function goBack() {
 }
 
 .chat__bar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   padding: 12rpx 16rpx calc(12rpx + env(safe-area-inset-bottom));
   background: #fff;
   border-top: 1rpx solid #e5e7eb;
+  box-sizing: border-box;
 }
 
 .chat__bar :deep(.wd-button) {
