@@ -3,8 +3,10 @@
     <wd-cell-group border>
       <wd-cell title="编辑资料" is-link @click="goProfile" />
       <wd-cell title="绑定手机号" is-link @click="goBindPhone" />
+      <wd-cell title="意见反馈" is-link @click="goFeedback" />
       <wd-cell title="关于同路行" value="组队出行工具" />
-      <wd-cell title="版本" value="0.1.0-m1" />
+      <wd-cell title="版本" value="0.1.0-m6" />
+      <wd-cell title="服务" :value="serviceLabel" />
       <wd-cell title="用户协议" is-link @click="open('user')" />
       <wd-cell title="隐私政策" is-link @click="open('privacy')" />
     </wd-cell-group>
@@ -22,13 +24,22 @@ import { onShow } from "@dcloudio/uni-app";
 import { ErrorCode } from "@walk-together/shared-types";
 import { ref } from "vue";
 import { cancelAccount } from "../../api/auth";
+import { getHealth } from "../../api/http";
 import { clearSession, isLoggedIn } from "../../store/session";
 
 const loggedIn = ref(false);
 const cancelling = ref(false);
+const serviceLabel = ref("检测中");
 
 onShow(() => {
   loggedIn.value = isLoggedIn();
+  void getHealth().then((result) => {
+    if (result.code === ErrorCode.OK && result.data?.version) {
+      serviceLabel.value = result.data.version;
+      return;
+    }
+    serviceLabel.value = "未连接";
+  });
 });
 
 function open(type: "user" | "privacy") {
@@ -47,6 +58,13 @@ function goBindPhone() {
     return;
   }
   uni.navigateTo({ url: "/pages/mine/bind-phone" });
+}
+
+function goFeedback() {
+  if (!ensureAuthed()) {
+    return;
+  }
+  uni.navigateTo({ url: "/pages/mine/feedback" });
 }
 
 function ensureAuthed(): boolean {

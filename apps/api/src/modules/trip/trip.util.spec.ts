@@ -7,6 +7,8 @@ import {
   createInviteCode,
   haversineKm,
   normalizeCreate,
+  parseDayEnd,
+  parseDayStart,
 } from './trip.util';
 
 function future(): string {
@@ -65,5 +67,13 @@ describe('trip.util', () => {
 
   it('computes distance in kilometers', () => {
     expect(haversineKm(104.06, 30.67, 101.96, 30.05)).toBeGreaterThan(100);
+  });
+
+  it('parses a calendar day into local bounds', () => {
+    const start = parseDayStart('2026-09-20');
+    const end = parseDayEnd('2026-09-20');
+    expect(start?.getHours()).toBe(0);
+    expect(end?.getTime()).toBe((start as Date).getTime() + 24 * 60 * 60 * 1000);
+    expect(parseDayStart('bad')).toBeNull();
   });
 });

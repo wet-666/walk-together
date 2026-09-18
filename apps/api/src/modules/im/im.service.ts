@@ -243,7 +243,9 @@ export class ImService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
-      await this.insertSystem(event.tripId, '行程已结束，群聊继续保留');
+      if (event.type === 'ended') {
+        await this.insertSystem(event.tripId, '行程已结束，群聊继续保留');
+      }
     } catch (error) {
       this.logger.warn(
         `同步群聊失败 ${event.type} trip=${event.tripId} ${error instanceof Error ? error.message : String(error)}`,

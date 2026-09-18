@@ -249,6 +249,25 @@ export function toMysqlDateTime(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
 }
 
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function parseDayStart(value?: string): Date | null {
+  const match = DAY.exec((value ?? '').trim());
+  if (!match) {
+    return null;
+  }
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function parseDayEnd(value?: string): Date | null {
+  const start = parseDayStart(value);
+  if (!start) {
+    return null;
+  }
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000);
+}
+
 export function toCoord(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === '') {
     return null;

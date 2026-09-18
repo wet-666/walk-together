@@ -3,7 +3,7 @@
     <view v-if="!loggedIn" class="msg__empty">
       <EmptyState
         title="登录后才能看车队群"
-        description="加入行程后，这里会出现本队群聊。入队自动进群，退队自动退群。"
+        description="入队之后这儿会出现车队群。"
         action-text="去登录"
         @action="goLogin"
       />
@@ -14,7 +14,7 @@
     <EmptyState
       v-else-if="!items.length"
       title="还没有车队群"
-      description="发布或加入一条行程后，消息列表会出现这支队的群。行程结束了也可以继续聊。"
+      description="加入车队后这里会出现群聊。"
       action-text="去行程广场"
       @action="goTrip"
     />

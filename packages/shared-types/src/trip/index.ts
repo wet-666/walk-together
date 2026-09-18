@@ -57,6 +57,8 @@ export const MemberStatus = {
 
 export type MemberStatusValue = (typeof MemberStatus)[keyof typeof MemberStatus];
 
+export const TRIP_DETAIL_POLL_INTERVAL_MS = 5000;
+
 export const CopyVisibility = {
   PUBLIC: 'public',
   PRIVATE: 'private',
@@ -68,6 +70,14 @@ export interface TripPlaceInput {
   name: string;
   lng?: number | null;
   lat?: number | null;
+}
+
+export interface PlaceSuggestion {
+  name: string;
+  address: string;
+  district: string;
+  lng: number | null;
+  lat: number | null;
 }
 
 export interface CreateTripDto {
@@ -140,7 +150,11 @@ export interface TripSummary {
   id: number;
   title: string;
   originName: string;
+  originLng: number | null;
+  originLat: number | null;
   destName: string;
+  destLng: number | null;
+  destLat: number | null;
   departAt: string;
   vehicleCount: number;
   maxVehicles: number;
@@ -151,6 +165,7 @@ export interface TripSummary {
   distanceKm: number | null;
   tags: string[];
   myStatus: MemberStatusValue | null;
+  myRole: MemberRoleValue | null;
 }
 
 export interface TripDetail {

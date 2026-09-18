@@ -1,4 +1,4 @@
-import { ErrorCode } from '@walk-together/shared-types';
+import { ErrorCode, FEEDBACK_MAX_LENGTH } from '@walk-together/shared-types';
 import { BusinessException } from '../../common/exceptions/business.exception';
 
 export const CN_MOBILE = /^1[3-9]\d{9}$/;
@@ -12,7 +12,9 @@ export function assertPhone(phone: string): string {
 }
 
 export function defaultNickname(seed: string): string {
-  const tail = seed.replace(/[^0-9a-zA-Z]/g, '').slice(-4) || '0000';
+  const compact = seed.replace(/[^0-9a-zA-Z]/g, '');
+  const tail =
+    compact.length >= 8 ? compact.slice(2, 4) + compact.slice(-4) : compact.slice(-4) || '0000';
   return `同路人${tail}`;
 }
 
@@ -63,4 +65,28 @@ export function assertAvatarUrl(url: string): string {
     throw new BusinessException(ErrorCode.PROFILE_INVALID, '头像地址不正确');
   }
   return value;
+}
+
+export function parseFeedback(input: { content?: unknown; contact?: unknown }): {
+  content: string;
+  contact: string | null;
+} {
+  const content = typeof input.content === 'string' ? input.content.trim() : '';
+  if (!content) {
+    throw new BusinessException(ErrorCode.FEEDBACK_INVALID, '请填写意见内容');
+  }
+  if (content.length > FEEDBACK_MAX_LENGTH) {
+    throw new BusinessException(
+      ErrorCode.FEEDBACK_INVALID,
+      `意见不能超过 ${FEEDBACK_MAX_LENGTH} 个字`,
+    );
+  }
+  const contact = typeof input.contact === 'string' ? input.contact.trim() : '';
+  if (contact.length > 64) {
+    throw new BusinessException(ErrorCode.FEEDBACK_INVALID, '联系方式过长');
+  }
+  return {
+    content,
+    contact: contact || null,
+  };
 }

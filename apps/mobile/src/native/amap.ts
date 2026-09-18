@@ -1,5 +1,13 @@
+export type AmapLngLat = {
+  getLng: () => number;
+  getLat: () => number;
+};
+
 export type AmapOverlay = {
   setMap: (map: AmapMap | null) => void;
+  setPath?: (path: Array<[number, number]>) => void;
+  setPosition?: (position: [number, number]) => void;
+  on?: (event: string, handler: () => void) => void;
 };
 
 export type AmapJsApi = {
@@ -26,21 +34,44 @@ export type AmapJsApi = {
   Polyline: new (options: {
     path: Array<[number, number]>;
     strokeColor?: string;
+    strokeOpacity?: number;
     strokeWeight?: number;
     strokeStyle?: string;
+    strokeDasharray?: number[];
     lineJoin?: string;
     lineCap?: string;
+    zIndex?: number;
+    showDir?: boolean;
   }) => AmapOverlay & { setPath: (path: Array<[number, number]>) => void };
   Scale?: new (options?: { position?: string }) => unknown;
   ToolBar?: new (options?: { position?: string }) => unknown;
   plugin?: (name: string | string[], callback: () => void) => void;
+  Driving?: new (options?: { hideMarkers?: boolean; autoFitView?: boolean }) => {
+    search: (
+      origin: [number, number],
+      destination: [number, number],
+      options: { waypoints?: Array<[number, number]> },
+      callback: (status: string, result: AmapDrivingResult) => void,
+    ) => void;
+  };
+};
+
+export type AmapDrivingResult = {
+  routes?: Array<{
+    steps?: Array<{
+      path?: Array<AmapLngLat | [number, number] | { lng: number; lat: number }>;
+    }>;
+  }>;
 };
 
 export type AmapMap = {
   setFitView: (overlays?: unknown[], immediately?: boolean, avoid?: number[]) => void;
   setZoomAndCenter: (zoom: number, center: [number, number], immediately?: boolean) => void;
   addControl: (control: unknown) => void;
-  on: (event: string, handler: () => void) => void;
+  add?: (overlay: AmapOverlay | AmapOverlay[]) => void;
+  remove?: (overlay: AmapOverlay | AmapOverlay[]) => void;
+  on: (event: string, handler: (e?: { lnglat?: AmapLngLat }) => void) => void;
+  resize?: () => void;
   destroy: () => void;
 };
 
@@ -94,6 +125,11 @@ export function loadAmapJs(): Promise<AmapJsApi | null> {
     window.setTimeout(() => {
       finish(window.AMap?.Map ? window.AMap : null);
     }, 12000);
+  }).then((api) => {
+    if (!api) {
+      loading = null;
+    }
+    return api;
   });
   return loading;
 }

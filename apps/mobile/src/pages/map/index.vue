@@ -1,27 +1,8 @@
 <template>
   <view class="map-page">
-    <view v-if="!loggedIn" class="map-page__empty">
-      <EmptyState
-        title="登录后才能看见队友"
-        description="组队之后，这里会显示你、队友和本队路线。"
-        action-text="去登录"
-        @action="goLogin"
-      />
-    </view>
-
-    <view v-else-if="!snapshot" class="map-page__empty">
-      <EmptyState
-        title="加入行程后这里会出现地图"
-        description="点「发布行程」自己组队，或去行程广场加入别人的队伍。成队后才会出现路线和队友位置。"
-        action-text="发布行程"
-        extra-action-text="去行程广场加入"
-        @action="goPublish"
-        @extra="goTrip"
-      />
-    </view>
-
-    <view v-else class="map-page__stage">
+    <view v-if="snapshot" class="map-page__stage">
       <TeamMap
+        v-if="mapAlive"
         :snapshot="snapshot"
         :members="members"
         :self-user-id="selfUserId"
@@ -43,21 +24,44 @@
         </view>
       </view>
 
-      <view class="map-page__pad">
-        <text class="map-page__pad-title">{{ padTitle }}</text>
-        <view class="map-page__pad-row">
-          <wd-button size="small" @click="nudge(0, 1)">北</wd-button>
-        </view>
-        <view class="map-page__pad-row">
-          <wd-button size="small" @click="nudge(-1, 0)">西</wd-button>
-          <wd-button size="small" @click="nudge(0, 0)">复位</wd-button>
-          <wd-button size="small" @click="nudge(1, 0)">东</wd-button>
-        </view>
-        <view class="map-page__pad-row">
-          <wd-button size="small" @click="nudge(0, -1)">南</wd-button>
-        </view>
-        <wd-button size="small" plain block @click="askLocate">重新定位</wd-button>
+      <view class="map-page__locate">
+        <wd-button size="small" @click="askLocate">重新定位</wd-button>
       </view>
+    </view>
+
+    <view v-else-if="plazaMarks.length" class="map-page__stage">
+      <PickMap :markers="plazaMarks" :center="here" @select="onPlazaSelect" />
+      <view class="map-page__hud">
+        <view class="map-page__title">
+          <text class="map-page__name">招募中的车队</text>
+        </view>
+        <text class="map-page__hint">点标记看详情。加入后，这里会变成队友实时位置。</text>
+      </view>
+      <view class="map-page__locate">
+        <wd-button size="small" @click="goTrip">列表查看</wd-button>
+      </view>
+    </view>
+
+    <view v-else-if="!loggedIn" class="map-page__empty">
+      <EmptyState
+        title="登录后才能看见队友"
+        description="组队之后就能在这儿看到队友。"
+        action-text="去登录"
+        extra-action-text="去行程广场"
+        @action="goLogin"
+        @extra="goTrip"
+      />
+    </view>
+
+    <view v-else class="map-page__empty">
+      <EmptyState
+        title="加入行程后这里会出现地图"
+        description="先发一条行程，或者去广场加入别人的队。"
+        action-text="发布行程"
+        extra-action-text="去行程广场加入"
+        @action="goPublish"
+        @extra="goTrip"
+      />
     </view>
   </view>
 </template>
@@ -68,53 +72,53 @@ import {
   ErrorCode,
   type LocationPoint,
   type TripMapSnapshot,
+  type TripSummary,
   type WsServerMessage,
 } from "@walk-together/shared-types";
 import { computed, ref } from "vue";
 import { getActiveMap, getTripMap, getWsUrl, reportLocation } from "../../api/location";
+import { listPlaza } from "../../api/trip";
 import EmptyState from "../../components/EmptyState.vue";
+import PickMap from "../../components/PickMap.vue";
 import TeamMap from "../../components/TeamMap.vue";
-import { demoStepMeters, locateDevice, offsetLngLat } from "../../native/geolocation";
+import { locateDevice } from "../../native/geolocation";
 import { connectLocationSocket, type LocationSocket } from "../../native/location-socket";
 import { ensureLogin, getProfile, getToken, isLoggedIn } from "../../store/session";
 
 const loggedIn = ref(false);
 const snapshot = ref<TripMapSnapshot | null>(null);
 const members = ref<LocationPoint[]>([]);
+const plazaItems = ref<TripSummary[]>([]);
+const here = ref<{ lng: number; lat: number } | null>(null);
 const mapEngine = ref<"amap" | "photo" | "schematic" | "native">("schematic");
 const sync = ref<"ws" | "poll" | "offline">("offline");
-const east = ref(0);
-const north = ref(0);
 const locateStatus = ref<"gps" | "denied" | "unavailable" | "timeout" | "idle">("idle");
+const mapAlive = ref(false);
 const selfUserId = computed(() => getProfile()?.id ?? null);
 
 const locateHint = computed(() => {
   if (locateStatus.value === "gps") {
-    return "已用手机/浏览器定位";
+    return "已用手机定位";
   }
   if (locateStatus.value === "denied") {
-    return "浏览器拒绝了定位。允许定位，或用下面方向键移动自己（不会改路线）。";
+    return "定位被拒绝。请在系统或浏览器里允许定位，再点「重新定位」。";
   }
-  return "电脑通常拿不到 GPS。点方向键只移动自己的点，不会改路线。";
+  return "暂时没拿到定位。手机请打开定位权限；电脑浏览器通常没有 GPS，点会停在起点附近。";
 });
 
 const mapHint = computed(() => {
   if (mapEngine.value === "amap" || mapEngine.value === "native") {
-    return "可拖动、双指/滚轮缩放。默认看当前位置附近街区，点「看全程」才缩到整条路线。";
+    return "可以拖动缩放。点「回到我」看自己的位置。";
   }
   if (mapEngine.value === "photo") {
-    return "现在是静态底图。要拖动看路名，需要高德 JS Key 生效。";
+    return "现在是静态底图，拖不动。";
   }
-  return "现在是示意图。H5 需要配置高德 JS Key 才会出现可拖动的街区底图。";
+  return "现在是示意图，位置同步不受影响。";
 });
 
 function onMapEngine(value: "amap" | "photo" | "schematic" | "native") {
   mapEngine.value = value;
 }
-
-const padTitle = computed(() =>
-  locateStatus.value === "gps" ? "微调我的位置" : "电脑没定位时，点这里移动自己",
-);
 
 const syncText = computed(() => {
   if (sync.value === "ws") {
@@ -148,6 +152,21 @@ const memberLabels = computed(() => {
   });
 });
 
+const plazaMarks = computed(() =>
+  plazaItems.value.flatMap((item) => {
+    const point =
+      item.originLng != null && item.originLat != null
+        ? { lng: item.originLng, lat: item.originLat }
+        : item.destLng != null && item.destLat != null
+          ? { lng: item.destLng, lat: item.destLat }
+          : null;
+    if (!point) {
+      return [];
+    }
+    return [{ id: String(item.id), lng: point.lng, lat: point.lat, title: item.title }];
+  }),
+);
+
 let reportTimer: ReturnType<typeof setInterval> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let socket: LocationSocket | null = null;
@@ -156,15 +175,18 @@ let lastFix: { lng: number; lat: number } | null = null;
 
 onShow(() => {
   loggedIn.value = isLoggedIn();
+  mapAlive.value = true;
   if (!loggedIn.value) {
     stop();
     snapshot.value = null;
+    void loadPlaza();
     return;
   }
   void start();
 });
 
 onHide(() => {
+  mapAlive.value = false;
   stop();
 });
 
@@ -183,41 +205,20 @@ function goPublish() {
   uni.navigateTo({ url: "/pages/trip/publish" });
 }
 
-function nudge(dirEast: number, dirNorth: number) {
-  if (dirEast === 0 && dirNorth === 0) {
-    east.value = 0;
-    north.value = 0;
-  } else {
-    const step = demoStepMeters(nudgePoints.value);
-    east.value += dirEast * step;
-    north.value += dirNorth * step;
-  }
-  void publishLocation();
-  uni.showToast({
-    title: dirEast === 0 && dirNorth === 0 ? "已回到起点附近" : "已移动我的位置，路线不会变",
-    icon: "none",
-  });
+function onPlazaSelect(id: string) {
+  uni.navigateTo({ url: `/pages/trip/detail?id=${id}` });
 }
-
-const nudgePoints = computed(() => {
-  const line = snapshot.value?.polyline?.length
-    ? snapshot.value.polyline
-    : (snapshot.value?.nodes ?? []).filter((item) => item.lng != null && item.lat != null);
-  return line.map((item) => ({ lng: item.lng as number, lat: item.lat as number }));
-});
 
 async function askLocate() {
   const result = await locateDevice();
   locateStatus.value = result.status;
   if (result.location) {
     lastFix = result.location;
-    east.value = 0;
-    north.value = 0;
     void publishLocation();
     uni.showToast({ title: "已更新定位", icon: "none" });
     return;
   }
-  uni.showToast({ title: "还是没拿到定位，用手点方向键移动", icon: "none" });
+  uni.showToast({ title: "还是没拿到定位", icon: "none" });
 }
 
 async function start() {
@@ -225,8 +226,10 @@ async function start() {
   active = true;
   const loaded = await loadSnapshot();
   if (!loaded || !active) {
+    await loadPlaza();
     return;
   }
+  plazaItems.value = [];
   connectSocket(loaded.tripId);
   void publishLocation();
   const reportEvery = loaded.reportIntervalMs || 5000;
@@ -266,6 +269,20 @@ async function loadSnapshot(): Promise<TripMapSnapshot | null> {
   snapshot.value = result.data;
   members.value = result.data?.members ?? [];
   return result.data;
+}
+
+async function loadPlaza() {
+  const located = await locateDevice();
+  if (located.location) {
+    here.value = located.location;
+    lastFix = located.location;
+  }
+  const result = await listPlaza({
+    lng: here.value?.lng,
+    lat: here.value?.lat,
+    sort: here.value ? "distance" : "time",
+  });
+  plazaItems.value = result.code === ErrorCode.OK ? result.data ?? [] : [];
 }
 
 async function refreshSnapshot(tripId: number) {
@@ -348,10 +365,9 @@ async function publishLocation() {
   if (!lastFix) {
     return;
   }
-  const shifted = offsetLngLat(lastFix.lng, lastFix.lat, east.value, north.value);
   const reported = await reportLocation(current.tripId, {
-    lng: shifted.lng,
-    lat: shifted.lat,
+    lng: lastFix.lng,
+    lat: lastFix.lat,
     speed: result.location?.speed ?? null,
     heading: result.location?.heading ?? null,
     accuracy: result.location?.accuracy ?? null,
@@ -429,29 +445,10 @@ async function publishLocation() {
   padding: 6rpx 14rpx;
 }
 
-.map-page__pad {
+.map-page__locate {
   position: absolute;
   right: 24rpx;
   bottom: 24rpx;
-  width: 280rpx;
-  padding: 16rpx;
-  border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.96);
   z-index: 3;
-  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.12);
-}
-
-.map-page__pad-title {
-  display: block;
-  margin-bottom: 8rpx;
-  font-size: 20rpx;
-  color: #6b7280;
-}
-
-.map-page__pad-row {
-  display: flex;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 8rpx;
 }
 </style>

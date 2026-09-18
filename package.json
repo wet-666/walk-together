@@ -15,6 +15,7 @@
     "build:types": "pnpm --filter @walk-together/shared-types build",
     "build:api": "pnpm --filter @walk-together/shared-types build && pnpm --filter @walk-together/api build",
     "build:h5": "pnpm --filter @walk-together/mobile build:h5",
+    "build:deploy": "pnpm build:api && pnpm build:h5",
     "build:mp": "pnpm --filter @walk-together/mobile build:mp-weixin"
   },
   "pnpm": {

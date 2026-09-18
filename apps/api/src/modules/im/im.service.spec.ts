@@ -113,4 +113,15 @@ describe('ImService', () => {
       expect.objectContaining({ id: 17, content: '到服务区了', mine: false, readCount: 0 }),
     );
   });
+
+  it('does not post a system message for membership updates', async () => {
+    im.onModuleInit();
+    const listener = events.on.mock.calls[0][0] as (event: {
+      type: string;
+      tripId: number;
+      userIds: number[];
+    }) => Promise<void>;
+    await listener({ type: 'updated', tripId: 9, userIds: [1] });
+    expect(db.exec).not.toHaveBeenCalled();
+  });
 });

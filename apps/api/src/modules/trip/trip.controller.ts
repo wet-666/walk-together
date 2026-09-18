@@ -24,6 +24,7 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { BusinessException } from '../../common/exceptions/business.exception';
+import { AmapService } from './amap.service';
 import { TripService } from './trip.service';
 import { toCoord } from './trip.util';
 
@@ -35,13 +36,19 @@ type UploadedCover = {
 
 @Controller('trips')
 export class TripController {
-  constructor(private readonly trips: TripService) {}
+  constructor(
+    private readonly trips: TripService,
+    private readonly amap: AmapService,
+  ) {}
 
   @Public()
   @Get()
   list(
     @OptionalUserId() userId: number | null,
     @Query('keyword') keyword?: string,
+    @Query('dest') dest?: string,
+    @Query('departFrom') departFrom?: string,
+    @Query('departTo') departTo?: string,
     @Query('code') code?: string,
     @Query('lng') lng?: string,
     @Query('lat') lat?: string,
@@ -50,6 +57,9 @@ export class TripController {
   ) {
     return this.trips.listPlaza({
       keyword,
+      dest,
+      departFrom,
+      departTo,
       code,
       lng: toCoord(lng) ?? undefined,
       lat: toCoord(lat) ?? undefined,
@@ -60,8 +70,24 @@ export class TripController {
   }
 
   @Get('mine')
-  mine(@CurrentUserId() userId: number) {
-    return this.trips.listMine(userId);
+  mine(@CurrentUserId() userId: number, @Query('scope') scope?: string) {
+    return this.trips.listMine(userId, scope === 'all' ? 'all' : 'active');
+  }
+
+  @Public()
+  @Get('places')
+  async places(
+    @Query('keyword') keyword?: string,
+    @Query('lng') lng?: string,
+    @Query('lat') lat?: string,
+  ) {
+    const pointLng = toCoord(lng);
+    const pointLat = toCoord(lat);
+    if (pointLng != null && pointLat != null) {
+      const place = await this.amap.reverseGeocode(pointLng, pointLat);
+      return place ? [place] : [];
+    }
+    return this.amap.searchPlaces(keyword ?? '');
   }
 
   @Post()

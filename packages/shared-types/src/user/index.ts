@@ -1,4 +1,3 @@
-/** 车主认证。M1 只落库默认值 none，认证页在后续阶段。 */
 export const CertStatus = {
   NONE: 'none',
   PENDING: 'pending',
@@ -57,4 +56,11 @@ export interface UpdateProfileDto {
   avatarUrl?: string;
   vehicleModel?: string;
   plateNumber?: string;
+}
+
+export const FEEDBACK_MAX_LENGTH = 500;
+
+export interface CreateFeedbackDto {
+  content: string;
+  contact?: string;
 }

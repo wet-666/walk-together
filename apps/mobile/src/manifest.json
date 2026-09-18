@@ -2,8 +2,8 @@
     "name" : "同路行",
     "appid" : "",
     "description" : "组队出行，位置同行",
-    "versionName" : "0.1.0",
-    "versionCode" : "10",
+    "versionName" : "0.1.0-m6",
+    "versionCode" : "16",
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
@@ -18,12 +18,19 @@
         },
         /* 模块配置 */
         "modules" : {
-            "OAuth" : {}
+            "OAuth" : {},
+            "Geolocation" : {},
+            "Maps" : {}
         },
         /* 应用发布信息 */
         "distribute" : {
             /* android打包配置 */
             "android" : {
+                "packagename" : "com.tongluxing.app",
+                "minSdkVersion" : 21,
+                "targetSdkVersion" : 30,
+                "abiFilters" : [ "armeabi-v7a", "arm64-v8a" ],
+                "usesCleartextTraffic" : true,
                 "permissions" : [
                     "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
                     "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
@@ -45,13 +52,37 @@
                 ]
             },
             /* ios打包配置 */
-            "ios" : {},
-            /* SDK配置 */
+            "ios" : {
+                "idfa" : false,
+                "dSYMs" : false,
+                "privacyDescription" : {
+                    "NSLocationWhenInUseUsageDescription" : "用于在地图上显示你的位置并同步给队友",
+                    "NSLocationAlwaysAndWhenInUseUsageDescription" : "用于行程中持续同步位置给队友",
+                    "NSPhotoLibraryUsageDescription" : "用于上传头像和群聊图片",
+                    "NSPhotoLibraryAddUsageDescription" : "用于保存图片",
+                    "NSCameraUsageDescription" : "用于拍摄头像和群聊图片"
+                }
+            },
+            /* 高德 Key 填这里 */
             "sdkConfigs" : {
                 "oauth" : {
                     "weixin" : {
                         "appid" : "",
                         "UniversalLinks" : ""
+                    }
+                },
+                "maps" : {
+                    "amap" : {
+                        "name" : "amap",
+                        "appkey_ios" : "",
+                        "appkey_android" : ""
+                    }
+                },
+                "geolocation" : {
+                    "amap" : {
+                        "__platform__" : [ "ios", "android" ],
+                        "appkey_ios" : "",
+                        "appkey_android" : ""
                     }
                 }
             }

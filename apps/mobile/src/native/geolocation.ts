@@ -8,38 +8,6 @@ export type DeviceLocation = {
 
 export type LocateStatus = "gps" | "denied" | "unavailable" | "timeout";
 
-export function offsetLngLat(
-  lng: number,
-  lat: number,
-  eastMeters: number,
-  northMeters: number,
-): { lng: number; lat: number } {
-  const latRad = (lat * Math.PI) / 180;
-  const dLat = northMeters / 111320;
-  const dLng = eastMeters / (111320 * Math.cos(latRad) || 1);
-  return {
-    lng: Number((lng + dLng).toFixed(6)),
-    lat: Number((lat + dLat).toFixed(6)),
-  };
-}
-
-export function demoStepMeters(points: Array<{ lng: number; lat: number }>): number {
-  if (points.length < 2) {
-    return 4000;
-  }
-  const lngs = points.map((item) => item.lng);
-  const lats = points.map((item) => item.lat);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const midLat = ((minLat + maxLat) / 2) * (Math.PI / 180);
-  const widthM = (maxLng - minLng) * 111320 * Math.cos(midLat);
-  const heightM = (maxLat - minLat) * 111320;
-  const diag = Math.hypot(widthM, heightM);
-  return Math.round(Math.min(30000, Math.max(3000, diag * 0.08)));
-}
-
 export function getDeviceLocation(): Promise<DeviceLocation | null> {
   return locateDevice().then((result) => result.location);
 }

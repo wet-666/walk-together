@@ -75,3 +75,11 @@ export function cancelAccount() {
 export function uploadAvatar(filePath: string) {
   return upload<UserProfile>("/users/me/avatar", filePath);
 }
+
+export function submitFeedback(dto: { content: string; contact?: string }) {
+  return request<null>("/users/me/feedback", {
+    method: "POST",
+    data: dto,
+    loading: true,
+  });
+}

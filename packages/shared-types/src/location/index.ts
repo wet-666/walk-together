@@ -67,6 +67,11 @@ export type WsClientMessage =
   | { type: 'chat.unsubscribe' }
   | { type: 'ping' };
 
+export interface WsTripEvent {
+  type: 'trip';
+  tripId: number;
+}
+
 export type WsServerMessage =
   | { type: 'ready' }
   | { type: 'pong' }
@@ -74,4 +79,5 @@ export type WsServerMessage =
   | WsLocationEvent
   | WsChatEvent
   | WsChatReadEvent
+  | WsTripEvent
   | { type: 'error'; code: number; message: string };

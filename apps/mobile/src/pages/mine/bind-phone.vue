@@ -1,6 +1,6 @@
 <template>
   <view class="bind">
-    <text class="bind__lead">绑定后，微信和手机验证码会登录到同一个账号。</text>
+    <text class="bind__lead">绑了之后就能用这个手机号登录。</text>
     <wd-input
       v-model="phone"
       type="number"

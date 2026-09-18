@@ -24,17 +24,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
         return;
       }
 
-      const message =
-        typeof raw === 'string'
-          ? raw
-          : exception.message || '请求失败';
+      const message = typeof raw === 'string' ? raw : exception.message || '请求失败';
+      let code: number = status;
+      if (status === HttpStatus.UNAUTHORIZED) {
+        code = ErrorCode.UNAUTHORIZED;
+      } else if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+        code = ErrorCode.FAILED;
+      }
       response.status(status).json({
-        code:
-          status === HttpStatus.UNAUTHORIZED
-            ? ErrorCode.UNAUTHORIZED
-            : status === HttpStatus.INTERNAL_SERVER_ERROR
-              ? ErrorCode.FAILED
-              : status,
+        code,
         message,
         data: null,
       } satisfies ApiResult);

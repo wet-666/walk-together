@@ -25,10 +25,7 @@ export class SmsService {
     const mobile = assertPhone(phone);
     const vendor = this.vendorConfig();
     if (!this.devAuthEnabled() && !vendor) {
-      throw new BusinessException(
-        ErrorCode.SERVICE_UNAVAILABLE,
-        '短信通道未接通，请先配置短信密钥或开启开发验证码',
-      );
+      throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, '短信暂时发不出去');
     }
 
     const locked = await this.redis.setNx(this.sendKey(mobile), SEND_GAP_SECONDS, '1');
@@ -60,10 +57,7 @@ export class SmsService {
     if (!vendor) {
       await this.redis.del(this.sendKey(mobile), this.codeKey(mobile));
       await this.redis.incrBy(dayKey, -1);
-      throw new BusinessException(
-        ErrorCode.SERVICE_UNAVAILABLE,
-        '短信通道未接通，请先配置短信密钥或开启开发验证码',
-      );
+      throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, '短信暂时发不出去');
     }
 
     try {

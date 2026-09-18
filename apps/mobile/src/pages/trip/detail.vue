@@ -1,5 +1,11 @@
 <template>
   <view v-if="detail" class="detail">
+    <image
+      v-if="detail.coverUrl"
+      class="detail__cover"
+      mode="aspectFill"
+      :src="mediaUrl(detail.coverUrl)"
+    />
     <view class="detail__hero">
       <text class="detail__title">{{ detail.title }}</text>
       <text class="detail__route">{{ detail.originName }} → {{ detail.destName }}</text>
@@ -32,12 +38,21 @@
     <view class="detail__card">
       <text class="detail__h">成员（{{ detail.members.length }}）</text>
       <view v-for="member in detail.members" :key="member.userId" class="detail__member">
-        <view>
-          <text class="detail__name">{{ member.nickname }}</text>
-          <text class="detail__sub">
-            {{ member.role === "captain" ? "队长" : "队员" }}
-            {{ member.vehicleModel ? ` · ${member.vehicleModel}` : "" }}
-          </text>
+        <view class="detail__person">
+          <image
+            v-if="mediaUrl(member.avatarUrl)"
+            class="detail__avatar"
+            mode="aspectFill"
+            :src="mediaUrl(member.avatarUrl)"
+          />
+          <view v-else class="detail__avatar detail__avatar--fallback">{{ member.nickname.slice(0, 1) }}</view>
+          <view>
+            <text class="detail__name">{{ member.nickname }}</text>
+            <text class="detail__sub">
+              {{ member.role === "captain" ? "队长" : "队员" }}
+              {{ member.vehicleModel ? ` · ${member.vehicleModel}` : "" }}
+            </text>
+          </view>
         </view>
         <wd-button
           v-if="isCaptain && member.role !== 'captain' && member.status === 'approved'"
@@ -54,12 +69,21 @@
     <view v-if="isCaptain && detail.applications.length" class="detail__card">
       <text class="detail__h">待审批</text>
       <view v-for="item in detail.applications" :key="item.userId" class="detail__member">
-        <view>
-          <text class="detail__name">{{ item.nickname }}</text>
-          <text class="detail__sub">
-            {{ item.status === "leave_pending" ? "申请退出" : "申请加入" }}
-            {{ item.applyMessage ? ` · ${item.applyMessage}` : "" }}
-          </text>
+        <view class="detail__person">
+          <image
+            v-if="mediaUrl(item.avatarUrl)"
+            class="detail__avatar"
+            mode="aspectFill"
+            :src="mediaUrl(item.avatarUrl)"
+          />
+          <view v-else class="detail__avatar detail__avatar--fallback">{{ item.nickname.slice(0, 1) }}</view>
+          <view>
+            <text class="detail__name">{{ item.nickname }}</text>
+            <text class="detail__sub">
+              {{ item.status === "leave_pending" ? "申请退出" : "申请加入" }}
+              {{ item.applyMessage ? ` · ${item.applyMessage}` : "" }}
+            </text>
+          </view>
         </view>
         <view class="detail__ops">
           <wd-button size="small" type="primary" @click="onDecide(item.userId, true)">同意</wd-button>
@@ -92,9 +116,10 @@
 </template>
 
 <script setup lang="ts">
-import { onLoad } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
 import {
   ErrorCode,
+  TRIP_DETAIL_POLL_INTERVAL_MS,
   type AlongPlanValue,
   type CompanionDepthValue,
   type TripDetail,
@@ -112,6 +137,8 @@ import {
   removeMember,
   startTrip,
 } from "../../api/trip";
+import { resolveMediaUrl } from "../../config/env";
+import { onInboxTrip, startChatInbox } from "../../store/chat-inbox";
 import { ensureLogin } from "../../store/session";
 
 const detail = ref<TripDetail | null>(null);
@@ -130,24 +157,78 @@ const canApply = computed(() => {
   return !detail.value.myMember || detail.value.myMember.status === "rejected" || detail.value.myMember.status === "left";
 });
 
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let offInboxTrip: (() => void) | null = null;
+
 onLoad((query) => {
   tripId.value = Number(query?.id || 0);
   inviteCode.value = String(query?.code || "").toUpperCase();
-  void refresh();
 });
 
-async function refresh() {
+onShow(() => {
+  startChatInbox();
+  offInboxTrip?.();
+  offInboxTrip = onInboxTrip((id) => {
+    if (id === tripId.value) {
+      void refresh(true);
+    }
+  });
+  void refresh(false);
+  startPoll();
+});
+
+onHide(() => {
+  stopLive();
+});
+
+onUnload(() => {
+  stopLive();
+});
+
+async function refresh(announce = false) {
   if (!tripId.value) {
     emptyText.value = "行程不存在";
     return;
   }
-  const result = await getTrip(tripId.value, inviteCode.value || undefined);
+  const hadDetail = Boolean(detail.value);
+  const prevApps = detail.value?.applications.length ?? 0;
+  const result = await getTrip(tripId.value, inviteCode.value || undefined, !hadDetail);
   if (result.code === ErrorCode.OK && result.data) {
+    const nextApps = result.data.applications.length;
     detail.value = result.data;
+    if (hadDetail && announce && result.data.myMember?.role === "captain" && nextApps > prevApps) {
+      uni.showToast({ title: "有新的入队申请", icon: "none" });
+    }
     return;
   }
-  detail.value = null;
-  emptyText.value = result.message || "行程不存在";
+  if (!hadDetail) {
+    detail.value = null;
+    emptyText.value = result.message || "行程不存在";
+  }
+}
+
+function startPoll() {
+  stopPoll();
+  pollTimer = setInterval(() => {
+    void refresh(true);
+  }, TRIP_DETAIL_POLL_INTERVAL_MS);
+}
+
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function stopLive() {
+  stopPoll();
+  offInboxTrip?.();
+  offInboxTrip = null;
+}
+
+function mediaUrl(url: string | null | undefined) {
+  return resolveMediaUrl(url);
 }
 
 async function onApply() {
@@ -275,6 +356,13 @@ function nodeLabel(kind: string): string {
   gap: 10rpx;
 }
 
+.detail__cover {
+  width: 100%;
+  height: 280rpx;
+  border-radius: 16rpx;
+  background: #e5e7eb;
+}
+
 .detail__title {
   font-size: 36rpx;
   font-weight: 700;
@@ -328,7 +416,32 @@ function nodeLabel(kind: string): string {
   padding: 8rpx 0;
 }
 
+.detail__person {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  min-width: 0;
+}
+
+.detail__avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 16rpx;
+  background: #e5e7eb;
+  flex-shrink: 0;
+}
+
+.detail__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1d4f91;
+  color: #fff;
+  font-size: 28rpx;
+}
+
 .detail__name {
+  display: block;
   font-size: 28rpx;
 }
 

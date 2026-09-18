@@ -11,6 +11,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type {
   BindPhoneDto,
+  CreateFeedbackDto,
   UpdateProfileDto,
 } from '@walk-together/shared-types';
 import { ErrorCode } from '@walk-together/shared-types';
@@ -68,5 +69,10 @@ export class UserController {
   async cancel(@CurrentUserId() userId: number, @Req() request: AuthedRequest) {
     await this.auth.cancel(userId, request.tokenJti, request.tokenExp);
     return null;
+  }
+
+  @Post('me/feedback')
+  feedback(@CurrentUserId() userId: number, @Body() dto: CreateFeedbackDto) {
+    return this.users.submitFeedback(userId, dto);
   }
 }

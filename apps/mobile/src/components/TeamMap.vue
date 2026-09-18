@@ -13,6 +13,7 @@
       :enable-zoom="true"
       show-location
       @regionchange="onNativeRegion"
+      @updated="onNativeUpdated"
     />
     <!-- #endif -->
 
@@ -64,7 +65,15 @@
 import type { GeoLngLat, LocationPoint, TripMapSnapshot } from "@walk-together/shared-types";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { fetchTripBasemap } from "../api/location";
-import { getAmapJsKey, loadAmapJs, type AmapJsApi, type AmapMap, type AmapOverlay } from "../native/amap";
+import {
+  getAmapJsKey,
+  loadAmapJs,
+  type AmapDrivingResult,
+  type AmapJsApi,
+  type AmapLngLat,
+  type AmapMap,
+  type AmapOverlay,
+} from "../native/amap";
 
 const props = defineProps<{
   snapshot: TripMapSnapshot | null;
@@ -88,11 +97,19 @@ const includePoints = ref<Array<{ latitude: number; longitude: number }>>([]);
 let photoTimer: ReturnType<typeof setTimeout> | null = null;
 let mapApi: AmapJsApi | null = null;
 let map: AmapMap | null = null;
-let overlays: AmapOverlay[] = [];
+let routeOverlay: AmapOverlay | null = null;
+let nodeOverlays: AmapOverlay[] = [];
+const peopleOverlays = new Map<number, AmapOverlay>();
+let drivingTripId: number | null = null;
 let cameraReady = false;
+let instanceAlive = true;
+let resizeObserver: ResizeObserver | null = null;
+let onWindowResize: (() => void) | null = null;
+const resizeTimers: ReturnType<typeof setTimeout>[] = [];
 
 const routeColor = "#1D4F91";
 const dashed = computed(() => props.snapshot?.status === "recruiting");
+const localRoutePath = ref<GeoLngLat[] | null>(null);
 
 const geometry = computed(() => {
   const points: Array<{ lng: number; lat: number; kind: string; label: string; self?: boolean }> = [];
@@ -107,7 +124,7 @@ const geometry = computed(() => {
       label: node.kind === "origin" ? "起点" : node.kind === "dest" ? "终点" : node.name,
     });
   }
-  for (const item of props.snapshot?.polyline ?? []) {
+  for (const item of routePoints.value) {
     points.push({ lng: item.lng, lat: item.lat, kind: "line", label: "" });
   }
   for (const member of props.members) {
@@ -125,7 +142,9 @@ const geometry = computed(() => {
 const hasGeometry = computed(() => geometry.value.length > 0);
 
 const bounds = computed(() => {
-  const pts = geometry.value;
+  const all = geometry.value;
+  const routePts = all.filter((item) => item.kind !== "person");
+  const pts = routePts.length ? routePts : all;
   if (!pts.length) {
     return { minLng: 104, maxLng: 105, minLat: 30, maxLat: 31 };
   }
@@ -160,12 +179,33 @@ function project(lng: number, lat: number) {
   return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) };
 }
 
+function asLngLat(item: { lng: number; lat: number }): GeoLngLat | null {
+  const lng = Number(item.lng);
+  const lat = Number(item.lat);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null;
+  }
+  return { lng, lat };
+}
+
 const nodeLine = computed(() =>
-  (props.snapshot?.nodes ?? []).filter((item) => item.lng != null && item.lat != null) as GeoLngLat[],
+  (props.snapshot?.nodes ?? [])
+    .filter((item) => item.lng != null && item.lat != null)
+    .map((item) => asLngLat({ lng: item.lng as number, lat: item.lat as number }))
+    .filter((item): item is GeoLngLat => item !== null),
 );
 
+const routePoints = computed(() => {
+  const raw = localRoutePath.value?.length
+    ? localRoutePath.value
+    : props.snapshot?.polyline?.length
+      ? props.snapshot.polyline
+      : nodeLine.value;
+  return raw.map((item) => asLngLat(item)).filter((item): item is GeoLngLat => item !== null);
+});
+
 const svgPath = computed(() => {
-  const line = (props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value) as GeoLngLat[];
+  const line = routePoints.value;
   if (line.length < 2) {
     return "";
   }
@@ -206,12 +246,20 @@ const peopleMarks = computed(() =>
 );
 
 const centerLat = computed(() => {
+  const route = routePoints.value;
+  if (route.length) {
+    return route.reduce((sum, item) => sum + item.lat, 0) / route.length;
+  }
   const self = props.members.find((item) => item.userId === props.selfUserId);
-  return self?.lat ?? props.snapshot?.nodes.find((item) => item.lat != null)?.lat ?? 30.67;
+  return self?.lat ?? 30.67;
 });
 const centerLng = computed(() => {
+  const route = routePoints.value;
+  if (route.length) {
+    return route.reduce((sum, item) => sum + item.lng, 0) / route.length;
+  }
   const self = props.members.find((item) => item.userId === props.selfUserId);
-  return self?.lng ?? props.snapshot?.nodes.find((item) => item.lng != null)?.lng ?? 104.06;
+  return self?.lng ?? 104.06;
 });
 
 const nativeMarkers = computed(() => {
@@ -249,7 +297,7 @@ const nativeMarkers = computed(() => {
 });
 
 const nativeLines = computed(() => {
-  const line = props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value;
+  const line = routePoints.value;
   if (line.length < 2) {
     return [];
   }
@@ -281,21 +329,176 @@ function streetCenter(): [number, number] {
   return [centerLng.value, centerLat.value];
 }
 
+function routeScale(): number {
+  const pts = routePoints.value;
+  if (pts.length < 2) {
+    return 12;
+  }
+  const span = Math.max(
+    Math.max(...pts.map((item) => item.lng)) - Math.min(...pts.map((item) => item.lng)),
+    Math.max(...pts.map((item) => item.lat)) - Math.min(...pts.map((item) => item.lat)),
+  );
+  if (span > 8) return 5;
+  if (span > 4) return 6;
+  if (span > 2) return 7;
+  if (span > 1) return 8;
+  if (span > 0.4) return 9;
+  if (span > 0.15) return 11;
+  if (span > 0.05) return 13;
+  return 15;
+}
+
+function tripIncludePoints() {
+  const line = routePoints.value;
+  const step = line.length > 24 ? Math.ceil(line.length / 24) : 1;
+  const sampled = line.filter((_, index) => index % step === 0 || index === line.length - 1);
+  const points = [
+    ...sampled.map((item) => ({ latitude: item.lat, longitude: item.lng })),
+    ...(props.snapshot?.nodes ?? [])
+      .filter((item) => item.lng != null && item.lat != null)
+      .map((item) => ({ latitude: item.lat as number, longitude: item.lng as number })),
+  ];
+  const seen = new Set<string>();
+  return points.filter((item) => {
+    const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function hostHasSize(host: HTMLElement) {
+  const rect = host.getBoundingClientRect();
+  return (host.clientWidth || rect.width) > 8 && (host.clientHeight || rect.height) > 8;
+}
+
+async function waitForHostSize(host: HTMLElement) {
+  for (let i = 0; i < 25; i++) {
+    if (hostHasSize(host)) {
+      return true;
+    }
+    await new Promise<void>((resolve) => {
+      window.setTimeout(() => resolve(), 40);
+    });
+  }
+  return hostHasSize(host);
+}
+
+function bumpMapSize() {
+  try {
+    map?.resize?.();
+  } catch {
+    // 隐藏后再显示时容器尺寸可能还没稳定
+  }
+}
+
+function clearResizeHooks() {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (onWindowResize) {
+    window.removeEventListener("resize", onWindowResize);
+    onWindowResize = null;
+  }
+  resizeTimers.forEach((timer) => clearTimeout(timer));
+  resizeTimers.length = 0;
+}
+
+function hookResize(host: HTMLElement) {
+  clearResizeHooks();
+  onWindowResize = bumpMapSize;
+  window.addEventListener("resize", bumpMapSize);
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => bumpMapSize());
+    resizeObserver.observe(host);
+  }
+  for (const ms of [80, 240, 640]) {
+    resizeTimers.push(window.setTimeout(bumpMapSize, ms));
+  }
+}
+
+function attachOverlay(overlay: AmapOverlay) {
+  if (!map) {
+    return;
+  }
+  try {
+    if (typeof map.add === "function") {
+      map.add(overlay);
+      return;
+    }
+  } catch {
+    // 2.0 add 失败时退回 1.x setMap
+  }
+  overlay.setMap(map);
+}
+
+function detachOverlay(overlay: AmapOverlay | null) {
+  if (!overlay) {
+    return;
+  }
+  try {
+    if (map && typeof map.remove === "function") {
+      map.remove(overlay);
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  overlay.setMap(null);
+}
+
+function clearRouteOverlays() {
+  detachOverlay(routeOverlay);
+  routeOverlay = null;
+  nodeOverlays.forEach((item) => detachOverlay(item));
+  nodeOverlays = [];
+}
+
+function clearPeopleOverlays() {
+  peopleOverlays.forEach((item) => detachOverlay(item));
+  peopleOverlays.clear();
+}
+
+function teardownAmap() {
+  clearResizeHooks();
+  clearRouteOverlays();
+  clearPeopleOverlays();
+  try {
+    map?.destroy();
+  } catch {
+    // 切页销毁失败不影响下次重建
+  }
+  map = null;
+  cameraReady = false;
+}
+
 async function setupAmap() {
   if (!getAmapJsKey()) {
-    fallbackHint.value = "当前是示意图。配上高德 JS Key 后就能拖动查看路名和街区。";
+    fallbackHint.value = "暂时用示意图，位置还是会同步。";
     await loadPhoto();
     return;
   }
-  fallbackHint.value = "正在加载高德底图…";
+  fallbackHint.value = "正在加载地图…";
   engine.value = "amap";
   await nextTick();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   mapApi = await loadAmapJs();
+  if (!instanceAlive) {
+    return;
+  }
   const host = resolveHost();
   if (!mapApi || !host) {
-    fallbackHint.value = "高德底图没加载成功，先用示意图。检查 JS Key、安全密钥和域名白名单。";
+    fallbackHint.value = "地图没加载出来，先用示意图。";
     await loadPhoto();
+    return;
+  }
+  await waitForHostSize(host);
+  if (!instanceAlive) {
+    return;
+  }
+  teardownAmap();
+  if (!instanceAlive) {
     return;
   }
   map = new mapApi.Map(host, {
@@ -308,6 +511,7 @@ async function setupAmap() {
     scrollWheel: true,
     showLabel: true,
   });
+  hookResize(host);
   try {
     mapApi.plugin?.(["AMap.Scale", "AMap.ToolBar"], () => {
       if (!map || !mapApi) {
@@ -324,19 +528,26 @@ async function setupAmap() {
     // 控件失败不影响底图拖动和路名
   }
   map.on("complete", () => {
+    if (!instanceAlive || !map) {
+      return;
+    }
+    bumpMapSize();
     redrawAmap();
     if (!cameraReady) {
-      focusSelf();
+      fitTripCamera();
       cameraReady = true;
     }
   });
   redrawAmap();
-  window.setTimeout(() => {
-    if (!cameraReady && map) {
-      focusSelf();
+  resizeTimers.push(
+    window.setTimeout(() => {
+      if (!instanceAlive || !map || cameraReady) {
+        return;
+      }
+      fitTripCamera();
       cameraReady = true;
-    }
-  }, 800);
+    }, 800),
+  );
 }
 
 async function loadPhoto() {
@@ -357,7 +568,7 @@ async function loadPhoto() {
   }
   photoUrl.value = next;
   engine.value = "photo";
-  fallbackHint.value = "当前是静态底图，不能拖动。配上 JS Key 后可查看街区。";
+  fallbackHint.value = "这是静态底图，拖不动。";
 }
 
 function queuePhoto() {
@@ -372,33 +583,136 @@ function queuePhoto() {
   }, 700);
 }
 
-function redrawAmap() {
+function readDrivingPoint(
+  point: AmapLngLat | [number, number] | { lng: number; lat: number },
+): [number, number] | null {
+  if (Array.isArray(point) && point.length >= 2) {
+    const lng = Number(point[0]);
+    const lat = Number(point[1]);
+    return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+  }
+  if (point && typeof point === "object") {
+    if ("getLng" in point && "getLat" in point) {
+      const lng = Number(point.getLng());
+      const lat = Number(point.getLat());
+      return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+    }
+    if ("lng" in point && "lat" in point) {
+      const lng = Number(point.lng);
+      const lat = Number(point.lat);
+      return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+    }
+  }
+  return null;
+}
+
+function drivingPath(result: AmapDrivingResult): GeoLngLat[] {
+  const path = (result.routes?.[0]?.steps ?? [])
+    .flatMap((step) => step.path ?? [])
+    .map(readDrivingPoint)
+    .filter((item): item is [number, number] => item !== null)
+    .map(([lng, lat]) => ({ lng, lat }));
+  if (path.length <= 24) {
+    return path;
+  }
+  const step = Math.ceil(path.length / 200);
+  const sampled = path.filter((_, index) => index % step === 0);
+  const last = path[path.length - 1];
+  if (sampled[sampled.length - 1] !== last) {
+    sampled.push(last);
+  }
+  return sampled;
+}
+
+function upgradeDrivingRoute() {
+  const tripId = props.snapshot?.tripId;
+  const nodes = nodeLine.value;
+  if (!mapApi || !tripId || nodes.length < 2) {
+    return;
+  }
+  if (drivingTripId === tripId && (localRoutePath.value?.length ?? 0) >= 8) {
+    return;
+  }
+  if ((props.snapshot?.polyline?.length ?? 0) >= 8) {
+    return;
+  }
+  const origin: [number, number] = [nodes[0].lng, nodes[0].lat];
+  const destination: [number, number] = [nodes[nodes.length - 1].lng, nodes[nodes.length - 1].lat];
+  const waypoints = nodes.slice(1, -1).map((item) => [item.lng, item.lat] as [number, number]);
+  const apply = (api: AmapJsApi) => {
+    if (!instanceAlive || !api.Driving || drivingTripId === tripId) {
+      return;
+    }
+    drivingTripId = tripId;
+    const driving = new api.Driving({ hideMarkers: true, autoFitView: false });
+    driving.search(origin, destination, { waypoints }, (status, result) => {
+      if (!instanceAlive || status !== "complete") {
+        return;
+      }
+      const path = drivingPath(result);
+      if (path.length < 2) {
+        return;
+      }
+      localRoutePath.value = path;
+      drawRouteLine();
+      if (engine.value === "amap") {
+        fitTripCamera();
+      }
+    });
+  };
+  if (mapApi.Driving) {
+    apply(mapApi);
+    return;
+  }
+  try {
+    mapApi.plugin?.("AMap.Driving", () => {
+      if (mapApi) {
+        apply(mapApi);
+      }
+    });
+  } catch {
+    // 浏览器侧路径规划失败时仍保留起终点直线
+  }
+}
+
+function drawRouteLine() {
   if (!map || !mapApi) {
     return;
   }
-  overlays.forEach((item) => item.setMap(null));
-  overlays = [];
-  const line = (props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value).map(
-    (item) => [item.lng, item.lat] as [number, number],
-  );
-  if (line.length >= 2) {
-    const poly = new mapApi.Polyline({
-      path: line,
-      strokeColor: routeColor,
-      strokeWeight: 6,
-      strokeStyle: dashed.value ? "dashed" : "solid",
-      lineJoin: "round",
-      lineCap: "round",
-    });
-    poly.setMap(map);
-    overlays.push(poly);
+  const line = routePoints.value.map((item) => [item.lng, item.lat] as [number, number]);
+  detachOverlay(routeOverlay);
+  routeOverlay = null;
+  if (line.length < 2) {
+    return;
   }
+  const poly = new mapApi.Polyline({
+    path: line,
+    strokeColor: routeColor,
+    strokeOpacity: 1,
+    strokeWeight: 8,
+    strokeStyle: dashed.value ? "dashed" : "solid",
+    strokeDasharray: dashed.value ? [8, 4] : undefined,
+    lineJoin: "round",
+    lineCap: "round",
+    zIndex: 50,
+    showDir: true,
+  });
+  attachOverlay(poly);
+  routeOverlay = poly;
+}
+
+function drawNodeMarkers() {
+  if (!map || !mapApi) {
+    return;
+  }
+  nodeOverlays.forEach((item) => detachOverlay(item));
+  nodeOverlays = [];
   for (const node of props.snapshot?.nodes ?? []) {
     if (node.lng == null || node.lat == null) {
       continue;
     }
     const marker = new mapApi.Marker({
-      position: [node.lng, node.lat],
+      position: [Number(node.lng), Number(node.lat)],
       title: node.name,
       zIndex: 110,
       label: {
@@ -406,10 +720,24 @@ function redrawAmap() {
         direction: "bottom",
       },
     });
-    marker.setMap(map);
-    overlays.push(marker);
+    attachOverlay(marker);
+    nodeOverlays.push(marker);
   }
+}
+
+function syncPeopleMarkers() {
+  if (!map || !mapApi) {
+    return;
+  }
+  const seen = new Set<number>();
   for (const member of props.members) {
+    seen.add(member.userId);
+    const existing = peopleOverlays.get(member.userId);
+    if (existing?.setPosition) {
+      existing.setPosition([member.lng, member.lat]);
+      continue;
+    }
+    detachOverlay(existing ?? null);
     const marker = new mapApi.Marker({
       position: [member.lng, member.lat],
       title: member.nickname,
@@ -419,28 +747,69 @@ function redrawAmap() {
         direction: "top",
       },
     });
-    marker.setMap(map);
-    overlays.push(marker);
+    attachOverlay(marker);
+    peopleOverlays.set(member.userId, marker);
+  }
+  for (const [userId, marker] of peopleOverlays) {
+    if (seen.has(userId)) {
+      continue;
+    }
+    detachOverlay(marker);
+    peopleOverlays.delete(userId);
   }
 }
 
+function redrawAmap() {
+  if (!map || !mapApi) {
+    return;
+  }
+  drawRouteLine();
+  drawNodeMarkers();
+  syncPeopleMarkers();
+  upgradeDrivingRoute();
+}
+
 function focusSelf() {
+  const self = props.members.find((item) => item.userId === props.selfUserId);
   includePoints.value = [];
+  viewLat.value = self?.lat ?? centerLat.value;
+  viewLng.value = self?.lng ?? centerLng.value;
+  viewScale.value = 15;
+  map?.setZoomAndCenter(15, [viewLng.value, viewLat.value], false);
+}
+
+function fitTripCamera() {
+  const points = tripIncludePoints();
+  if (!points.length) {
+    focusSelf();
+    return;
+  }
+  if (points.length === 1) {
+    includePoints.value = [];
+    viewLat.value = points[0].latitude;
+    viewLng.value = points[0].longitude;
+    viewScale.value = 12;
+    map?.setZoomAndCenter(12, [points[0].longitude, points[0].latitude], false);
+    return;
+  }
   viewLat.value = centerLat.value;
   viewLng.value = centerLng.value;
-  viewScale.value = 15;
-  map?.setZoomAndCenter(15, streetCenter(), false);
+  viewScale.value = routeScale();
+  includePoints.value = points;
+  const routeLayer = [routeOverlay, ...nodeOverlays].filter((item): item is AmapOverlay => Boolean(item));
+  if (map && routeLayer.length) {
+    map.setFitView(routeLayer, false, [72, 48, 140, 48]);
+  }
 }
 
 function focusRoute() {
-  const line = props.snapshot?.polyline.length ? props.snapshot.polyline : nodeLine.value;
-  const points = [
-    ...line.map((item) => ({ latitude: item.lat, longitude: item.lng })),
-    ...props.members.map((item) => ({ latitude: item.lat, longitude: item.lng })),
-  ];
-  includePoints.value = points;
-  if (map && overlays.length) {
-    map.setFitView(overlays, false, [72, 48, 140, 48]);
+  fitTripCamera();
+}
+
+function onNativeUpdated() {
+  if (!cameraReady && routePoints.value.length) {
+    fitTripCamera();
+    cameraReady = true;
   }
 }
 
@@ -453,33 +822,40 @@ function onNativeRegion(event: { detail?: { type?: string; causedBy?: string } }
 watch(engine, (value) => emit("engine", value), { immediate: true });
 
 watch(
-  () => [props.members, props.snapshot],
+  () => props.snapshot?.tripId,
+  () => {
+    localRoutePath.value = null;
+    drivingTripId = null;
+  },
+);
+
+watch(
+  () => `${props.snapshot?.tripId}:${routePoints.value.length}:${props.snapshot?.polyline?.length ?? 0}:${props.snapshot?.status}`,
   () => {
     if (engine.value === "amap") {
-      redrawAmap();
-    }
-  },
-  { deep: true },
-);
-
-watch(
-  () => `${props.snapshot?.tripId}:${props.snapshot?.polyline.length}`,
-  () => {
-    if (engine.value !== "amap") {
+      drawRouteLine();
+      drawNodeMarkers();
+      upgradeDrivingRoute();
+    } else {
       queuePhoto();
     }
+    cameraReady = false;
+    void nextTick(() => {
+      fitTripCamera();
+      if (engine.value === "native" || engine.value === "amap") {
+        cameraReady = true;
+      }
+    });
   },
 );
 
 watch(
-  [centerLat, centerLng],
-  ([lat, lng]) => {
-    if (!cameraReady && Number.isFinite(lat) && Number.isFinite(lng)) {
-      viewLat.value = lat;
-      viewLng.value = lng;
+  () => props.members.map((item) => `${item.userId}:${item.lng}:${item.lat}`).join("|"),
+  () => {
+    if (engine.value === "amap") {
+      syncPeopleMarkers();
     }
   },
-  { immediate: true },
 );
 
 onMounted(() => {
@@ -488,23 +864,20 @@ onMounted(() => {
   // #endif
   // #ifdef MP-WEIXIN || APP-PLUS
   engine.value = "native";
-  viewLat.value = centerLat.value;
-  viewLng.value = centerLng.value;
+  fitTripCamera();
   cameraReady = true;
   // #endif
 });
 
 onBeforeUnmount(() => {
+  instanceAlive = false;
   if (photoTimer) {
     clearTimeout(photoTimer);
   }
   if (photoUrl.value) {
     URL.revokeObjectURL(photoUrl.value);
   }
-  overlays.forEach((item) => item.setMap(null));
-  overlays = [];
-  map?.destroy();
-  map = null;
+  teardownAmap();
 });
 
 defineExpose({ focusSelf, focusRoute });

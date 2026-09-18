@@ -12,11 +12,13 @@ import {
   type CompanionDepthValue,
   type CopyVisibilityValue,
   type CreateTripDto,
+  type MemberRoleValue,
   type MemberStatusValue,
   type TripCopy,
   type TripDetail,
   type TripMember,
   type TripNode,
+  type TripNodeKindValue,
   type TripPlaceInput,
   type TripPrivacyValue,
   type TripStatusValue,
@@ -43,6 +45,8 @@ import {
   isOpenStatus,
   mergeUpdate,
   normalizeCreate,
+  parseDayEnd,
+  parseDayStart,
   splitCsv,
   toCoord,
   toMysqlDateTime,
@@ -77,6 +81,7 @@ type TripRow = RowDataPacket & {
   status: TripStatusValue;
   created_at: Date | string;
   my_status?: MemberStatusValue | null;
+  my_role?: MemberRoleValue | null;
 };
 
 type NodeRow = RowDataPacket & {
@@ -119,6 +124,9 @@ export class TripService {
 
   async listPlaza(query: {
     keyword?: string;
+    dest?: string;
+    departFrom?: string;
+    departTo?: string;
     code?: string;
     lng?: number;
     lat?: number;
@@ -151,23 +159,43 @@ export class TripService {
       const like = `%${keyword}%`;
       params.push(like, like, like);
     }
+    const dest = (query.dest ?? '').trim();
+    if (dest) {
+      sql += ' AND t.dest_name LIKE ?';
+      params.push(`%${dest}%`);
+    }
+    const from = parseDayStart(query.departFrom);
+    if (from) {
+      sql += ' AND t.depart_at >= ?';
+      params.push(toMysqlDateTime(from));
+    }
+    const to = parseDayEnd(query.departTo);
+    if (to) {
+      sql += ' AND t.depart_at < ?';
+      params.push(toMysqlDateTime(to));
+    }
     sql += ' ORDER BY t.depart_at ASC LIMIT 50';
     const rows = await this.db.query<TripRow>(sql, params);
     return this.toSummaries(rows, query);
   }
 
-  async listMine(userId: number): Promise<TripSummary[]> {
+  async listMine(userId: number, scope: 'active' | 'all' = 'active'): Promise<TripSummary[]> {
+    const statusFilter =
+      scope === 'all'
+        ? ''
+        : `AND mine.status IN ('approved', 'pending', 'leave_pending')`;
     const rows = await this.db.query<TripRow>(
       `SELECT t.*, u.nickname AS captain_nickname,
          (SELECT COUNT(*) FROM trip_members m
            WHERE m.trip_id = t.id AND m.status IN ('approved', 'leave_pending')) AS vehicle_count,
-         mine.status AS my_status
+         mine.status AS my_status,
+         mine.role AS my_role
        FROM trip_members mine
        JOIN trips t ON t.id = mine.trip_id
        JOIN users u ON u.id = t.captain_id
        WHERE mine.user_id = ?
-         AND mine.status IN ('approved', 'pending', 'leave_pending')
-       ORDER BY t.depart_at ASC`,
+         ${statusFilter}
+       ORDER BY t.depart_at ${scope === 'all' ? 'DESC' : 'ASC'}`,
       [userId],
     );
     return this.toSummaries(rows, { userId });
@@ -209,6 +237,40 @@ export class TripService {
       nodes,
       members: members.filter((item) => isLiveMemberStatus(item.status)),
     };
+  }
+
+  async saveNodeCoordinates(
+    tripId: number,
+    nodes: Array<{ id: number; kind: TripNodeKindValue; lng: number | null; lat: number | null }>,
+  ): Promise<void> {
+    const origin = nodes.find((item) => item.kind === TripNodeKind.ORIGIN);
+    const dest = nodes.find((item) => item.kind === TripNodeKind.DEST);
+    for (const node of nodes) {
+      if (node.lng == null || node.lat == null) {
+        continue;
+      }
+      await this.db.exec('UPDATE trip_nodes SET lng = ?, lat = ? WHERE id = ? AND trip_id = ?', [
+        node.lng,
+        node.lat,
+        node.id,
+        tripId,
+      ]);
+    }
+    const sets: string[] = [];
+    const params: number[] = [];
+    if (origin?.lng != null && origin.lat != null) {
+      sets.push('origin_lng = ?', 'origin_lat = ?');
+      params.push(origin.lng, origin.lat);
+    }
+    if (dest?.lng != null && dest.lat != null) {
+      sets.push('dest_lng = ?', 'dest_lat = ?');
+      params.push(dest.lng, dest.lat);
+    }
+    if (!sets.length) {
+      return;
+    }
+    params.push(tripId);
+    await this.db.exec(`UPDATE trips SET ${sets.join(', ')} WHERE id = ?`, params);
   }
 
   async create(userId: number, dto: CreateTripDto): Promise<TripDetail> {
@@ -466,6 +528,7 @@ export class TripService {
         [tripId, userId, message],
       );
     }
+    this.notifyWatchers(tripId, Number(trip.captain_id));
     return this.detail(tripId, userId);
   }
 
@@ -489,6 +552,8 @@ export class TripService {
       );
       if (action === 'approve') {
         this.events.emit({ type: 'left', tripId, userId: targetUserId, reason: 'left' });
+      } else {
+        this.notifyWatchers(tripId, targetUserId);
       }
       return this.detail(tripId, captainId);
     }
@@ -498,6 +563,7 @@ export class TripService {
         `UPDATE trip_members SET status = 'rejected' WHERE trip_id = ? AND user_id = ?`,
         [tripId, targetUserId],
       );
+      this.notifyWatchers(tripId, targetUserId);
       return this.detail(tripId, captainId);
     }
 
@@ -536,6 +602,7 @@ export class TripService {
         `UPDATE trip_members SET status = 'left' WHERE trip_id = ? AND user_id = ?`,
         [tripId, userId],
       );
+      this.notifyWatchers(tripId, Number(trip.captain_id));
       return this.detail(tripId, userId);
     }
     if (member.status !== MemberStatus.APPROVED) {
@@ -545,6 +612,7 @@ export class TripService {
       `UPDATE trip_members SET status = 'leave_pending' WHERE trip_id = ? AND user_id = ?`,
       [tripId, userId],
     );
+    this.notifyWatchers(tripId, Number(trip.captain_id));
     return this.detail(tripId, userId);
   }
 
@@ -634,15 +702,19 @@ export class TripService {
     query: { lng?: number; lat?: number; sort?: 'time' | 'distance'; nearby?: boolean; userId?: number | null },
   ): Promise<TripSummary[]> {
     const myStatus = new Map<number, MemberStatusValue>();
+    const myRole = new Map<number, MemberRoleValue>();
     if (query.userId && rows.length) {
       const ids = rows.map((row) => Number(row.id));
       const placeholders = ids.map(() => '?').join(',');
-      const mine = await this.db.query<RowDataPacket & { trip_id: number | string; status: MemberStatusValue }>(
-        `SELECT trip_id, status FROM trip_members WHERE user_id = ? AND trip_id IN (${placeholders})`,
+      const mine = await this.db.query<
+        RowDataPacket & { trip_id: number | string; status: MemberStatusValue; role: MemberRoleValue }
+      >(
+        `SELECT trip_id, status, role FROM trip_members WHERE user_id = ? AND trip_id IN (${placeholders})`,
         [query.userId, ...ids],
       );
       for (const item of mine) {
         myStatus.set(Number(item.trip_id), item.status);
+        myRole.set(Number(item.trip_id), item.role);
       }
     }
 
@@ -657,7 +729,11 @@ export class TripService {
         id: Number(row.id),
         title: row.title,
         originName: row.origin_name,
+        originLng,
+        originLat,
         destName: row.dest_name,
+        destLng: toCoord(row.dest_lng),
+        destLat: toCoord(row.dest_lat),
         departAt: this.toIso(row.depart_at),
         vehicleCount: Number(row.vehicle_count ?? 0),
         maxVehicles: Number(row.max_vehicles),
@@ -668,6 +744,10 @@ export class TripService {
         distanceKm,
         tags: splitCsv(row.tags),
         myStatus: (row.my_status as MemberStatusValue | undefined) ?? myStatus.get(Number(row.id)) ?? null,
+        myRole:
+          (row.my_role as MemberRoleValue | undefined) ??
+          myRole.get(Number(row.id)) ??
+          (query.userId && Number(row.captain_id) === query.userId ? MemberRole.CAPTAIN : null),
       } satisfies TripSummary;
     });
 
@@ -700,7 +780,7 @@ export class TripService {
        WHERE mine.user_id = ?
          AND mine.status IN ('approved', 'leave_pending')
          AND t.status IN ('recruiting', 'ongoing')
-       ORDER BY CASE t.status WHEN 'ongoing' THEN 0 ELSE 1 END, t.depart_at ASC
+       ORDER BY CASE t.status WHEN 'ongoing' THEN 0 ELSE 1 END, t.updated_at DESC, t.id DESC
        LIMIT 1`,
       [userId],
     );
@@ -986,6 +1066,14 @@ export class TripService {
       applyMessage: row.apply_message,
       joinedAt: this.toIso(row.created_at),
     };
+  }
+
+  private notifyWatchers(tripId: number, ...userIds: number[]): void {
+    const ids = [...new Set(userIds.filter((id) => Number.isInteger(id) && id > 0))];
+    if (!ids.length) {
+      return;
+    }
+    this.events.emit({ type: 'updated', tripId, userIds: ids });
   }
 
   private imageExt(mimetype: string): string | null {

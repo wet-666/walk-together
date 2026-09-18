@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { PlaceSuggestion } from '@walk-together/shared-types';
 import { toCoord } from './trip.util';
 
 export type GeoPoint = { lng: number; lat: number };
@@ -29,18 +30,116 @@ export class AmapService {
       if (body.status !== '1' || !body.geocodes?.[0]?.location) {
         return null;
       }
-      const [lngRaw, latRaw] = body.geocodes[0].location.split(',');
-      const lng = toCoord(lngRaw);
-      const lat = toCoord(latRaw);
-      if (lng === null || lat === null) {
-        return null;
-      }
-      return { lng, lat };
+      return parseLocation(body.geocodes[0].location);
     } catch (error) {
       this.logger.warn(
         `amap geocode failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return null;
+    }
+  }
+
+  async searchPlaces(keyword: string): Promise<PlaceSuggestion[]> {
+    const key = this.config.get<string>('AMAP_WEB_KEY', '').trim();
+    const text = keyword.trim();
+    if (!key || text.length < 2) {
+      return [];
+    }
+    const url = `https://restapi.amap.com/v3/assistant/inputtips?keywords=${encodeURIComponent(text)}&key=${encodeURIComponent(key)}`;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) {
+        return [];
+      }
+      const body = (await response.json()) as {
+        status?: string;
+        tips?: Array<{
+          name?: string;
+          address?: string | string[];
+          district?: string;
+          location?: string | string[];
+        }>;
+      };
+      if (body.status !== '1') {
+        return [];
+      }
+      return (body.tips ?? [])
+        .map((tip) => {
+          const point = parseLocation(typeof tip.location === 'string' ? tip.location : undefined);
+          const name = (tip.name ?? '').trim();
+          if (!name) {
+            return null;
+          }
+          return {
+            name,
+            address: asText(tip.address),
+            district: (tip.district ?? '').trim(),
+            lng: point?.lng ?? null,
+            lat: point?.lat ?? null,
+          } satisfies PlaceSuggestion;
+        })
+        .filter((item): item is PlaceSuggestion => item !== null)
+        .slice(0, 8);
+    } catch (error) {
+      this.logger.warn(
+        `amap inputtips failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  async reverseGeocode(lng: number, lat: number): Promise<PlaceSuggestion | null> {
+    const key = this.config.get<string>('AMAP_WEB_KEY', '').trim();
+    if (!key) {
+      return {
+        name: '地图选点',
+        address: '',
+        district: '',
+        lng,
+        lat,
+      };
+    }
+    const url = `https://restapi.amap.com/v3/geocode/regeo?location=${encodeURIComponent(`${lng},${lat}`)}&key=${encodeURIComponent(key)}`;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) {
+        return null;
+      }
+      const body = (await response.json()) as {
+        status?: string;
+        regeocode?: {
+          formatted_address?: string | string[];
+          addressComponent?: { district?: string; city?: string | string[] };
+        };
+      };
+      if (body.status !== '1' || !body.regeocode) {
+        return {
+          name: '地图选点',
+          address: '',
+          district: '',
+          lng,
+          lat,
+        };
+      }
+      const name = asText(body.regeocode.formatted_address) || '地图选点';
+      return {
+        name: name.slice(0, 64),
+        address: name,
+        district: (body.regeocode.addressComponent?.district ?? '').trim(),
+        lng,
+        lat,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `amap regeo failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return {
+        name: '地图选点',
+        address: '',
+        district: '',
+        lng,
+        lat,
+      };
     }
   }
 
@@ -85,9 +184,11 @@ export class AmapService {
       }
       const body = (await response.json()) as {
         status?: string;
+        info?: string;
         route?: { paths?: Array<{ steps?: Array<{ polyline?: string }> }> };
       };
       if (body.status !== '1') {
+        this.logger.warn(`amap driving rejected: ${body.info || body.status || 'unknown'}`);
         return points;
       }
       const polyline = (body.route?.paths?.[0]?.steps ?? [])
@@ -129,6 +230,23 @@ export class AmapService {
       return null;
     }
   }
+}
+
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseLocation(raw: string | undefined): GeoPoint | null {
+  if (!raw || !raw.includes(',')) {
+    return null;
+  }
+  const [lngRaw, latRaw] = raw.split(',');
+  const lng = toCoord(lngRaw);
+  const lat = toCoord(latRaw);
+  if (lng === null || lat === null) {
+    return null;
+  }
+  return { lng, lat };
 }
 
 function parsePolyline(raw: string | undefined): Array<GeoPoint | null> {

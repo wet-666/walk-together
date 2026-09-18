@@ -38,7 +38,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.ensureSchema();
     } catch (error) {
       this.logger.error(
-        '表结构初始化失败，登录和行程前请确认 MySQL 已启动',
+        '初始化表结构失败',
         error instanceof Error ? error.stack : String(error),
       );
     }
@@ -100,11 +100,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.pool;
   }
 
-  /**
-   * 用户表按交付文档用户系统预留：
-   * 手机号 / 微信身份 / 昵称头像 / 车型车牌 / 车主认证状态。
-   * status：1 正常，0 已注销。
-   */
   private async ensureSchema(): Promise<void> {
     await this.exec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -239,6 +234,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     await this.ensureColumn('trips', 'im_group_id', 'VARCHAR(64) NULL');
     await this.shiftUtcChatTimestamps();
+
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS user_feedbacks (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id BIGINT UNSIGNED NOT NULL,
+        content VARCHAR(500) NOT NULL,
+        contact VARCHAR(64) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_feedback_user (user_id, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
   }
 
   private async shiftUtcChatTimestamps(): Promise<void> {

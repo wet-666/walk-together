@@ -85,6 +85,18 @@
       "style": {
         "navigationBarTitleText": "协议"
       }
+    },
+    {
+      "path": "pages/mine/trips",
+      "style": {
+        "navigationBarTitleText": "我的行程"
+      }
+    },
+    {
+      "path": "pages/mine/feedback",
+      "style": {
+        "navigationBarTitleText": "意见反馈"
+      }
     }
   ],
   "globalStyle": {

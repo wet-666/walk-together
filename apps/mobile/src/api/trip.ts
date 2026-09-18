@@ -1,6 +1,7 @@
 import type {
   ApplyJoinDto,
   CreateTripDto,
+  PlaceSuggestion,
   TripCopy,
   TripDetail,
   TripSummary,
@@ -24,6 +25,9 @@ function queryString(params: Record<string, string | number | undefined>): strin
 
 export function listPlaza(params: {
   keyword?: string;
+  dest?: string;
+  departFrom?: string;
+  departTo?: string;
   code?: string;
   lng?: number;
   lat?: number;
@@ -33,6 +37,9 @@ export function listPlaza(params: {
   return request<TripSummary[]>(
     `/trips${queryString({
       keyword: params.keyword,
+      dest: params.dest,
+      departFrom: params.departFrom,
+      departTo: params.departTo,
       code: params.code,
       lng: params.lng,
       lat: params.lat,
@@ -42,12 +49,20 @@ export function listPlaza(params: {
   );
 }
 
-export function listMine() {
-  return request<TripSummary[]>("/trips/mine");
+export function listMine(scope: "active" | "all" = "active") {
+  return request<TripSummary[]>(`/trips/mine${queryString({ scope: scope === "all" ? "all" : undefined })}`);
 }
 
-export function getTrip(id: number, code?: string) {
-  return request<TripDetail>(`/trips/${id}${queryString({ code })}`);
+export function getTrip(id: number, code?: string, toast = true) {
+  return request<TripDetail>(`/trips/${id}${queryString({ code })}`, { toast });
+}
+
+export function searchPlaces(keyword: string) {
+  return request<PlaceSuggestion[]>(`/trips/places${queryString({ keyword })}`, { toast: false });
+}
+
+export function reversePlace(lng: number, lat: number) {
+  return request<PlaceSuggestion[]>(`/trips/places${queryString({ lng, lat })}`, { toast: false });
 }
 
 export function createTrip(dto: CreateTripDto) {

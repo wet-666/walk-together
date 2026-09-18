@@ -18,7 +18,7 @@ import { LocationHub } from './location.hub';
 import { buildStaticMapQuery, parseReport, tripLocationKey, tripRouteKey } from './location.util';
 
 const LOCATION_TTL_SECONDS = 600;
-const ROUTE_TTL_SECONDS = 1800;
+const ROUTE_TTL_SECONDS = 21600;
 
 @Injectable()
 export class LocationService {
@@ -34,9 +34,10 @@ export class LocationService {
     if (!context) {
       return null;
     }
+    const nodes = await this.fillNodeCoords(context.tripId, context.nodes);
     const [members, polyline] = await Promise.all([
       this.listPoints(context.tripId, context.members),
-      this.routePolyline(context.tripId, context.nodes),
+      this.routePolyline(context.tripId, nodes),
     ]);
     return {
       tripId: context.tripId,
@@ -44,7 +45,7 @@ export class LocationService {
       status: context.status,
       originName: context.originName,
       destName: context.destName,
-      nodes: context.nodes,
+      nodes,
       polyline,
       roster: context.members.map((item) => ({
         userId: item.userId,
@@ -115,6 +116,31 @@ export class LocationService {
       });
     }
     return points;
+  }
+
+  private async fillNodeCoords(
+    tripId: number,
+    nodes: TripMapSnapshot['nodes'],
+  ): Promise<TripMapSnapshot['nodes']> {
+    let dirty = false;
+    const next = [];
+    for (const node of nodes) {
+      if (node.lng != null && node.lat != null) {
+        next.push(node);
+        continue;
+      }
+      const point = await this.amap.geocode(node.name);
+      if (!point) {
+        next.push(node);
+        continue;
+      }
+      dirty = true;
+      next.push({ ...node, lng: point.lng, lat: point.lat });
+    }
+    if (dirty) {
+      await this.trips.saveNodeCoordinates(tripId, next);
+    }
+    return next;
   }
 
   private async routePolyline(

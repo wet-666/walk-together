@@ -6,6 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { TokenService } from '../../common/auth/token.service';
 import { ImHub } from '../im/im.hub';
 import { ImService } from '../im/im.service';
+import { TripEventHub, type TripLifecycleEvent } from '../trip/trip-event.hub';
 import { LocationHub } from './location.hub';
 import { LocationService } from './location.service';
 
@@ -26,6 +27,7 @@ export class LocationGateway implements OnModuleDestroy {
   private unsubscribeHub: (() => void) | null = null;
   private unsubscribeChat: (() => void) | null = null;
   private unsubscribeRead: (() => void) | null = null;
+  private unsubscribeTrip: (() => void) | null = null;
 
   constructor(
     private readonly tokens: TokenService,
@@ -33,6 +35,7 @@ export class LocationGateway implements OnModuleDestroy {
     private readonly hub: LocationHub,
     private readonly im: ImService,
     private readonly chatHub: ImHub,
+    private readonly trips: TripEventHub,
   ) {}
 
   attach(server: { on: (event: 'upgrade', listener: (req: IncomingMessage, socket: Duplex, head: Buffer) => void) => void }): void {
@@ -58,6 +61,9 @@ export class LocationGateway implements OnModuleDestroy {
     this.unsubscribeRead = this.chatHub.onRead((tripId, userId, lastMessageId) => {
       void this.fanoutRead(tripId, userId, lastMessageId);
     });
+    this.unsubscribeTrip = this.trips.on((event) => {
+      this.fanoutTrip(event);
+    });
   }
 
   onModuleDestroy(): void {
@@ -67,6 +73,8 @@ export class LocationGateway implements OnModuleDestroy {
     this.unsubscribeChat = null;
     this.unsubscribeRead?.();
     this.unsubscribeRead = null;
+    this.unsubscribeTrip?.();
+    this.unsubscribeTrip = null;
     this.wss?.clients.forEach((client) => client.close());
     this.wss?.close();
     this.wss = null;
@@ -261,6 +269,29 @@ export class LocationGateway implements OnModuleDestroy {
     for (const memberId of memberIds) {
       for (const socket of this.userSockets.get(memberId) ?? []) {
         deliver(socket);
+      }
+    }
+  }
+
+  private fanoutTrip(event: TripLifecycleEvent): void {
+    const userIds =
+      event.type === 'updated'
+        ? event.userIds
+        : event.type === 'joined' || event.type === 'left'
+          ? [event.userId]
+          : [];
+    if (!userIds.length) {
+      return;
+    }
+    const payload: WsServerMessage = { type: 'trip', tripId: event.tripId };
+    const sent = new Set<WebSocket>();
+    for (const userId of userIds) {
+      for (const socket of this.userSockets.get(userId) ?? []) {
+        if (sent.has(socket)) {
+          continue;
+        }
+        sent.add(socket);
+        this.send(socket, payload);
       }
     }
   }

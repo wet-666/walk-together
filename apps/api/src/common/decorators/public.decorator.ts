@@ -2,5 +2,5 @@ import { SetMetadata } from '@nestjs/common';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 
-/** 标记为公开接口。未标记的路由会校验 JWT。 */
+/** 不校验登录 */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);

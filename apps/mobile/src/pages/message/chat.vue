@@ -3,7 +3,7 @@
     <view v-if="blocked" class="chat__empty">
       <EmptyState
         title="不在这支车队里"
-        description="入队后会自动进群。退出或被移除后就不能再看这个群。"
+        description="不在队里就进不了这个群。"
         action-text="回消息列表"
         @action="goBack"
       />
@@ -25,22 +25,41 @@
           class="chat__item"
           :class="itemClass(item)"
         >
-          <text v-if="item.type === 'system'" class="chat__system">{{ item.content }}</text>
-          <view v-else class="chat__bubble-wrap">
-            <text class="chat__name">{{ item.mine ? "我" : item.senderNickname }}</text>
-            <image
-              v-if="item.type === 'image'"
-              class="chat__image"
-              mode="widthFix"
-              :src="mediaUrl(item.content)"
-              @click="preview(item.content)"
-            />
-            <text v-else class="chat__bubble">{{ item.content }}</text>
-            <view class="chat__meta">
-              <text class="chat__time">{{ formatChatTime(item.createdAt) }}</text>
-              <text v-if="receiptText(item)" class="chat__read">{{ receiptText(item) }}</text>
-            </view>
+          <view v-if="item.type === 'system'" class="chat__system">
+            <text class="chat__system-text">{{ item.content }}</text>
           </view>
+          <template v-else>
+            <view class="chat__avatar">
+              <image
+                v-if="avatarSrc(item)"
+                class="chat__avatar-img"
+                mode="aspectFill"
+                :src="avatarSrc(item)"
+              />
+              <view v-else class="chat__avatar-fallback">
+                <text class="chat__avatar-letter">{{ avatarText(item) }}</text>
+              </view>
+            </view>
+            <view class="chat__main">
+              <view class="chat__name">
+                <text class="chat__name-text">{{ item.mine ? "我" : item.senderNickname }}</text>
+              </view>
+              <image
+                v-if="item.type === 'image'"
+                class="chat__image"
+                mode="widthFix"
+                :src="mediaUrl(item.content)"
+                @click="preview(item.content)"
+              />
+              <view v-else class="chat__bubble">
+                <text class="chat__bubble-text" selectable>{{ item.content }}</text>
+              </view>
+              <view class="chat__meta">
+                <text v-if="receiptText(item)" class="chat__read">{{ receiptText(item) }}</text>
+                <text class="chat__time">{{ formatChatTime(item.createdAt) }}</text>
+              </view>
+            </view>
+          </template>
         </view>
         <view id="chat-end" />
       </scroll-view>
@@ -356,6 +375,16 @@ function itemClass(item: ChatMessage) {
   return item.mine ? "chat__item--mine" : "chat__item--other";
 }
 
+function avatarSrc(item: ChatMessage) {
+  const url = item.senderAvatarUrl || (item.mine ? getProfile()?.avatarUrl : null);
+  return resolveMediaUrl(url);
+}
+
+function avatarText(item: ChatMessage) {
+  const name = item.mine ? getProfile()?.nickname || "我" : item.senderNickname;
+  return name.slice(0, 1) || "同";
+}
+
 function mediaUrl(url: string) {
   return resolveMediaUrl(url);
 }
@@ -384,6 +413,7 @@ function goBack() {
 .chat__scroller {
   flex: 1;
   height: 0;
+  width: 100%;
   padding: 16rpx 24rpx 12rpx;
   box-sizing: border-box;
 }
@@ -396,8 +426,12 @@ function goBack() {
 }
 
 .chat__item {
-  margin-bottom: 20rpx;
+  width: 100%;
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  margin-bottom: 24rpx;
+  box-sizing: border-box;
 }
 
 .chat__item--system {
@@ -405,42 +439,114 @@ function goBack() {
 }
 
 .chat__item--mine {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
 
-.chat__item--other {
-  justify-content: flex-start;
-}
-
-.chat__system {
-  font-size: 22rpx;
-  color: #9ca3af;
+.chat__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 12rpx;
   background: #e5e7eb;
-  padding: 8rpx 16rpx;
-  border-radius: 8rpx;
 }
 
-.chat__bubble-wrap {
-  max-width: 78%;
+.chat__avatar-img,
+.chat__avatar-fallback {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.chat__avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1d4f91;
+}
+
+.chat__avatar-letter {
+  color: #fff;
+  font-size: 28rpx;
+}
+
+.chat__main {
+  flex: 1;
+  min-width: 0;
+  max-width: 70%;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  margin: 0 16rpx;
 }
 
-.chat__item--mine .chat__bubble-wrap {
+.chat__item--mine .chat__main {
   align-items: flex-end;
 }
 
 .chat__name {
+  max-width: 100%;
+  margin-bottom: 8rpx;
+}
+
+.chat__name-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 22rpx;
   color: #9ca3af;
-  margin-bottom: 6rpx;
+}
+
+.chat__system {
+  max-width: 80%;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  background: #e5e7eb;
+}
+
+.chat__system-text {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.chat__bubble {
+  max-width: 100%;
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.chat__item--mine .chat__bubble {
+  background: #1d4f91;
+}
+
+.chat__bubble-text {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: #111827;
+}
+
+.chat__item--mine .chat__bubble-text {
+  color: #fff;
+}
+
+.chat__image {
+  width: 360rpx;
+  max-width: 100%;
+  border-radius: 12rpx;
+  background: #e5e7eb;
 }
 
 .chat__meta {
-  margin-top: 6rpx;
+  margin-top: 8rpx;
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12rpx;
 }
 
 .chat__item--mine .chat__meta {
@@ -451,40 +557,35 @@ function goBack() {
 .chat__read {
   font-size: 20rpx;
   color: #9ca3af;
+  line-height: 1.2;
 }
 
-.chat__bubble {
-  padding: 16rpx 20rpx;
-  border-radius: 16rpx;
-  font-size: 28rpx;
-  line-height: 1.5;
-  background: #fff;
-  color: #111827;
+.chat__read {
+  margin-right: 12rpx;
 }
 
-.chat__item--mine .chat__bubble {
-  background: #1d4f91;
-  color: #fff;
-}
-
-.chat__image {
-  width: 360rpx;
-  border-radius: 12rpx;
-  background: #e5e7eb;
+.chat__item--mine .chat__read {
+  margin-right: 0;
+  margin-left: 12rpx;
 }
 
 .chat__bar {
   display: flex;
   align-items: center;
-  gap: 12rpx;
   padding: 12rpx 16rpx calc(12rpx + env(safe-area-inset-bottom));
   background: #fff;
   border-top: 1rpx solid #e5e7eb;
 }
 
+.chat__bar :deep(.wd-button) {
+  flex-shrink: 0;
+}
+
 .chat__input {
   flex: 1;
+  min-width: 0;
   height: 72rpx;
+  margin: 0 12rpx;
   padding: 0 20rpx;
   border-radius: 12rpx;
   background: #f3f4f6;

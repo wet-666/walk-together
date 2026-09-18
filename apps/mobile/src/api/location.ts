@@ -77,7 +77,6 @@ export function getWsUrl(token: string): string {
 
 function getHttpBase(): string {
   const fromRequest = (globalThis as { location?: { protocol: string; host: string } }).location;
-  // H5 开发走同源代理。
   // #ifdef H5
   if (fromRequest) {
     return `${fromRequest.protocol}//${fromRequest.host}/api/v1`;

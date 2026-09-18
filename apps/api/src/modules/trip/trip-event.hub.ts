@@ -4,7 +4,8 @@ export type TripLifecycleEvent =
   | { type: 'created'; tripId: number; userId: number; title: string }
   | { type: 'joined'; tripId: number; userId: number }
   | { type: 'left'; tripId: number; userId: number; reason: 'left' | 'removed' }
-  | { type: 'ended'; tripId: number };
+  | { type: 'ended'; tripId: number }
+  | { type: 'updated'; tripId: number; userIds: number[] };
 
 type TripEventListener = (event: TripLifecycleEvent) => void;
 

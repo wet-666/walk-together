@@ -6,6 +6,7 @@ import { getProfile, getToken, isLoggedIn } from "./session";
 
 type ChatHandler = (tripId: number, message: ChatMessage) => void;
 type ReadHandler = (tripId: number, userId: number, lastMessageId: number) => void;
+type TripHandler = (tripId: number) => void;
 
 let socket: LocationSocket | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -14,6 +15,7 @@ let started = false;
 let activeChatTripId = 0;
 const chatHandlers = new Set<ChatHandler>();
 const readHandlers = new Set<ReadHandler>();
+const tripHandlers = new Set<TripHandler>();
 
 export function setActiveChatTripId(tripId: number): void {
   activeChatTripId = tripId;
@@ -53,6 +55,13 @@ export function onInboxRead(handler: ReadHandler): () => void {
   readHandlers.add(handler);
   return () => {
     readHandlers.delete(handler);
+  };
+}
+
+export function onInboxTrip(handler: TripHandler): () => void {
+  tripHandlers.add(handler);
+  return () => {
+    tripHandlers.delete(handler);
   };
 }
 
@@ -119,6 +128,12 @@ function onSocketMessage(message: WsServerMessage): void {
   if (message.type === "chat.read") {
     for (const handler of readHandlers) {
       handler(message.tripId, message.userId, message.lastMessageId);
+    }
+    return;
+  }
+  if (message.type === "trip") {
+    for (const handler of tripHandlers) {
+      handler(message.tripId);
     }
   }
 }

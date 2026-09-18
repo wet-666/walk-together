@@ -4,11 +4,7 @@ function trimSlash(url: string): string {
   return url.replace(/\/$/, "");
 }
 
-/**
- * H5 开发走 Vite 代理，可用相对路径。
- * 微信小程序和 APP 必须是完整 http(s) 地址；真机请把 VITE_API_BASE_URL
- * 改成电脑局域网 IP，例如 http://192.168.1.8:3000/api/v1。
- */
+// H5 可以用相对路径。App / 小程序要写完整 http(s) 地址。
 export function getApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim();
 
@@ -30,6 +26,10 @@ export function getApiBaseUrl(): string {
 export const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);
 
 export const CN_MOBILE = /^1[3-9]\d{9}$/;
+
+export function isLoopbackApiBase(): boolean {
+  return /127\.0\.0\.1|localhost/i.test(getApiBaseUrl());
+}
 
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) {

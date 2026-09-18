@@ -3,6 +3,7 @@ import {
   CertStatus,
   ErrorCode,
   type CertStatusValue,
+  type CreateFeedbackDto,
   type UpdateProfileDto,
   type UserProfile,
   type WechatClientValue,
@@ -18,6 +19,7 @@ import {
   assertNickname,
   defaultNickname,
   normalizeOptional,
+  parseFeedback,
 } from './user.util';
 
 type UserRow = RowDataPacket & {
@@ -195,6 +197,17 @@ export class UserService {
     this.assertActive(user);
     await this.db.exec('UPDATE users SET status = 0 WHERE id = ? AND status = 1', [userId]);
     await this.tokens.blockUser(userId);
+  }
+
+  async submitFeedback(userId: number, dto: CreateFeedbackDto): Promise<null> {
+    await this.requireActive(userId);
+    const parsed = parseFeedback(dto);
+    await this.db.exec('INSERT INTO user_feedbacks (user_id, content, contact) VALUES (?, ?, ?)', [
+      userId,
+      parsed.content,
+      parsed.contact,
+    ]);
+    return null;
   }
 
   private hasWechat(user: UserRow): boolean {

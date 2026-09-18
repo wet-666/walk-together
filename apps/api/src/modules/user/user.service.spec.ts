@@ -101,4 +101,14 @@ describe('UserService', () => {
       errorCode: ErrorCode.ACCOUNT_DISABLED,
     } satisfies Partial<BusinessException>);
   });
+
+  it('stores feedback after the account is confirmed active', async () => {
+    db.query.mockResolvedValue([wechatUser]);
+    db.exec.mockResolvedValue({ insertId: 1 });
+    await expect(users.submitFeedback(1, { content: '建议加导航', contact: '' })).resolves.toBeNull();
+    expect(db.exec).toHaveBeenCalledWith(
+      'INSERT INTO user_feedbacks (user_id, content, contact) VALUES (?, ?, ?)',
+      [1, '建议加导航', null],
+    );
+  });
 });

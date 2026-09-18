@@ -9,6 +9,7 @@ import { LocationService } from './location.service';
 describe('LocationService', () => {
   const trips = {
     getLiveMapContext: jest.fn(),
+    saveNodeCoordinates: jest.fn(),
   };
   const redis = {
     hset: jest.fn(),
@@ -127,6 +128,26 @@ describe('LocationService', () => {
       expect.objectContaining({ userId: 2, nickname: '队员', lng: 104.2, online: true }),
     ]);
     expect(snapshot?.roster).toHaveLength(2);
+    expect(snapshot?.polyline.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('geocodes missing trip nodes so the map can follow the route', async () => {
+    trips.getLiveMapContext.mockResolvedValueOnce({
+      ...context(),
+      nodes: [
+        { id: 1, seq: 1, kind: 'origin' as const, name: '成都', lng: 104.06, lat: 30.67 },
+        { id: 2, seq: 2, kind: 'dest' as const, name: '康定', lng: null, lat: null },
+      ],
+    });
+    amap.geocode.mockResolvedValueOnce({ lng: 101.96, lat: 30.05 });
+
+    const snapshot = await locations.snapshot(1, 9);
+
+    expect(snapshot?.nodes[1]).toMatchObject({ name: '康定', lng: 101.96, lat: 30.05 });
+    expect(trips.saveNodeCoordinates).toHaveBeenCalledWith(
+      9,
+      expect.arrayContaining([expect.objectContaining({ id: 2, lng: 101.96, lat: 30.05 })]),
+    );
     expect(snapshot?.polyline.length).toBeGreaterThanOrEqual(2);
   });
 });

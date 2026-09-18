@@ -8,6 +8,7 @@ export type {
   CreateTripDto,
   MemberRoleValue,
   MemberStatusValue,
+  PlaceSuggestion,
   TripCopy,
   TripDetail,
   TripMember,
@@ -26,6 +27,7 @@ export {
   CopyVisibility,
   MemberRole,
   MemberStatus,
+  TRIP_DETAIL_POLL_INTERVAL_MS,
   TripNodeKind,
   TripPrivacy,
   TripStatus,
@@ -39,6 +41,7 @@ export type {
   WsClientMessage,
   WsLocationEvent,
   WsServerMessage,
+  WsTripEvent,
 } from './location';
 export {
   LOCATION_ONLINE_MS,

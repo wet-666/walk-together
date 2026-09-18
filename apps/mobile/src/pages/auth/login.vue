@@ -2,7 +2,7 @@
   <view class="login">
     <view class="login__hero">
       <text class="login__name">同路行</text>
-      <text class="login__lead">微信授权或手机验证码，登录后就可以组队出发</text>
+      <text class="login__lead">登录后就可以组队出发</text>
     </view>
 
     <!-- #ifdef MP-WEIXIN || APP-PLUS -->
@@ -15,7 +15,7 @@
     <!-- #endif -->
 
     <!-- #ifdef H5 -->
-    <text class="login__hint">H5 开发请用手机验证码。微信登录在小程序和 App 中使用。</text>
+    <text class="login__hint">网页版用手机号登录</text>
     <!-- #endif -->
 
     <wd-input
@@ -250,7 +250,7 @@ function maybeCompleteWechatProfile(profile: UserProfile) {
   if (needProfile) {
     uni.showModal({
       title: "完善头像和昵称",
-      content: "微信不再直接返回头像昵称。完善后方便队友认出你。",
+      content: "补个头像和昵称，方便队友认出你。",
       confirmText: "去完善",
       cancelText: "稍后",
       success: (res) => {
